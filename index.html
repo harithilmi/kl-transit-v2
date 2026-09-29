@@ -992,7 +992,8 @@
     for (const { st, d } of near) {
       for (const id of st.lines) {
         const line = transit.lines.find((l) => l.id === id);
-        if (line && !found.has(railCode(line) + line.color)) found.set(railCode(line) + line.color, { line, station: st.name, d });
+        // One chip per code: a station on two Komuter lines is still just "KTM"
+        if (line && !found.has(railCode(line))) found.set(railCode(line), { line, station: st.name, d });
       }
     }
     return [...found.values()];
