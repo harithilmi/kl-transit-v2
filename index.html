@@ -193,6 +193,22 @@
     .timeline .mins { color: var(--ink-3); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; padding-top: 1px; }
     .others { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
 
+    /* Stop detail: bus mark in the stop's colour, code tag, per-bus frequency on the right */
+    .stop-mark {
+      width: 38px; height: 38px; border-radius: 50%; flex: none; display: grid; place-items: center; color: #fff;
+      background: var(--c); box-shadow: 0 0 0 4px color-mix(in oklab, var(--c) 18%, transparent);
+    }
+    .stop-mark svg { width: 20px; height: 20px; }
+    .code-tag {
+      display: inline-block; padding: 1px 6px; margin-right: 4px; border-radius: 6px; background: var(--chip);
+      color: var(--ink-2); font-weight: 700; font-variant-numeric: tabular-nums;
+    }
+    .row .every { flex: none; text-align: right; line-height: 1.15; }
+    .row .every b { display: block; font-size: 14px; font-variant-numeric: tabular-nums; }
+    .row .every span { color: var(--ink-3); font-size: 11px; font-weight: 600; }
+    .pill { display: inline-block; padding: 0 6px; border-radius: 999px; background: var(--chip); color: var(--ink-2); font-size: 11px; font-weight: 700; }
+    .pill.ended { background: #fbe4e1; color: #b3261e; }
+
     .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .chip-btn {
       border: 0; border-radius: 999px; padding: 6px 12px; background: var(--chip); color: var(--ink-2);
@@ -462,6 +478,7 @@
 
   // Neutral slate: stands out on every operator's route colour
   const STOP = '#4a5264';
+  const BUS_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="15" rx="3"/><path d="M5 11h14M8 21v-3M16 21v-3"/><circle cx="8.5" cy="14.5" r=".6" fill="currentColor"/><circle cx="15.5" cy="14.5" r=".6" fill="currentColor"/></svg>';
   const ACCENT = '#1363b8';
 
   // City areas: the current one is a faint grey tint; other cities are blue, clickable, and light up on hover
@@ -469,10 +486,10 @@
   const areaColor = (/** @type {string} */ current) => ['case', ['==', ['get', 'id'], current], STOP, ACCENT];
   const areaFill = (/** @type {string} */ current) => ({
     'fill-color': areaColor(current),
-    'fill-opacity': ['case', ['==', ['get', 'id'], current], 0.035, areaHover, 0.16, 0.06],
+    'fill-opacity': ['case', ['==', ['get', 'id'], current], 0.035, areaHover, 0.1, 0.02],
   });
   const areaLineOpacity = (/** @type {string} */ current) => ['interpolate', ['linear'], ['zoom'],
-    8, ['case', ['==', ['get', 'id'], current], 0.55, areaHover, 1, 0.6], 15, ['case', ['==', ['get', 'id'], current], 0.25, areaHover, 1, 0.6]];
+    8, ['case', ['==', ['get', 'id'], current], 0.55, areaHover, 0.9, 0.3], 15, ['case', ['==', ['get', 'id'], current], 0.25, areaHover, 0.9, 0.3]];
   // Searched place marker (matches .place-icon) and how far "nearby" stops reach, in metres
   const PLACE = '#d6453a';
   const WALK = 500;
@@ -539,12 +556,17 @@
     map.addLayer({ id: 'area-fill', type: 'fill', source: 'areas', paint: areaFill('') });
     map.addLayer({ id: 'area-line', type: 'line', source: 'areas', layout: round,
       paint: { 'line-color': areaColor(''), 'line-dasharray': [2, 2],
-        'line-width': ['interpolate', ['linear'], ['zoom'], 6, ['case', areaHover, 2, 1], 14, ['case', areaHover, 3, 2]],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 6, ['case', areaHover, 2, 1], 14, ['case', areaHover, 2.5, 1.5]],
         'line-opacity': areaLineOpacity('') } });
-    // Other cities: name + arrow, reads as "go here"
-    map.addLayer({ id: 'area-label', type: 'symbol', source: 'areas', maxzoom: 12, filter: ['!=', ['get', 'id'], ''],
-      layout: { 'text-field': ['concat', ['get', 'name'], '  →'], 'text-font': ['Noto Sans Bold'], 'text-size': 13 },
-      paint: { 'text-color': ACCENT, 'text-halo-color': '#ffffff', 'text-halo-width': 1.8 } });
+    // Other cities: one name per city (a polygon label repeats per tile), at its outline's middle
+    map.addSource('area-names', { type: 'geojson', data: fc(regions.map((r) => {
+      const ring = r.area[0][0];
+      const mid = [0, 1].map((k) => ring.reduce((sum, c) => sum + c[k], 0) / ring.length);
+      return { type: 'Feature', properties: { id: r.id, name: r.name }, geometry: { type: 'Point', coordinates: mid } };
+    })) });
+    map.addLayer({ id: 'area-label', type: 'symbol', source: 'area-names', maxzoom: 12, filter: ['!=', ['get', 'id'], ''],
+      layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Bold'], 'text-size': 12 },
+      paint: { 'text-color': ACCENT, 'text-opacity': 0.75, 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 } });
 
     // Stops by zoom (busrouter's principle, one level later so the map stays calm): < 15 dots · 15+ icons · 16+ code · 17+ name + code.
     // No special terminus icons: Malaysian route ends aren't SG-style interchanges.
@@ -849,21 +871,22 @@
       const dirs = svc.patterns.map((p, d) => ({ p, d, k: p.stops.indexOf(stopIdx) })).filter(({ p, k }) => k >= 0 && k < p.stops.length - 1);
       const main = dirs[0] ?? { p: svc.patterns[0], d: 0, k: 0 };
       const toText = dirs.length ? dirs.map(({ p }) => `${p.loop ? 'Loop via' : 'To'} ${escapeHtml(p.to)}`).join(' · ') : 'Ends here';
+      const note = runningNote(main.p);
+      const every = headway(main.p);
       return `<button class="row" data-svc="${svcIdx}" data-dir="${main.d}">
           ${badge(svc)}
           <div class="main"><div class="t">${toText}</div>
-          <div class="s">${runningNote(main.p) ? `<span class="off${runningNote(main.p).startsWith('Ended') ? ' ended' : ''}">${runningNote(main.p)}</span> · ` : ''}${clock(main.p.first)}–${clock(main.p.last)}${headway(main.p) ? ` · every ~${headway(main.p)} min` : ''}</div></div>
+            <div class="s">${clock(main.p.first)}–${clock(main.p.last)}${note ? ` <span class="pill${note.startsWith('Ended') ? ' ended' : ''}">${note}</span>` : ''}</div></div>
+          ${every ? `<div class="every"><b>${every} min</b><span>every</span></div>` : ''}
         </button>`;
     }).join('');
 
     body.innerHTML = `
       <div class="detail-head">
         <button class="close-x" data-back aria-label="Close">✕</button>
-        <div class="title-row"><span class="stop-icon" style="width:34px;height:34px"></span>
-          <div><h2>${escapeHtml(st[2])}</h2><div class="op">${st[3] ? `Stop ${escapeHtml(st[3])} · ` : ''}${passing.length} bus${passing.length === 1 ? '' : 'es'}</div></div></div>
-        ${passing.length ? '<button class="chip-btn" data-passing>Show all passing routes</button>' : ''}
+        <div class="title-row"><span class="stop-mark" style="--c:${stopColor(stopIdx)}">${BUS_SVG}</span>
+          <div><h2>${escapeHtml(st[2])}</h2><div class="op">${st[3] ? `<span class="code-tag">${escapeHtml(st[3])}</span>` : ''}${passing.length} bus${passing.length === 1 ? '' : 'es'}</div></div></div>
       </div>
-      <h3 class="section-title">Buses here</h3>
       ${rows || '<div class="empty">No buses</div>'}`;
   }
 
@@ -910,8 +933,11 @@
       fitCoords(data.lines[view.svc][view.dir]);
       if (isMobile()) setSheet('');
     } else if (view.kind === 'stop') {
+      // Show every bus through the stop right away
       const s = data.region.stops[view.stop];
-      map.flyTo({ center: [s[0], s[1]], zoom: Math.max(map.getZoom(), 15.5), padding: pad(), duration: 700 });
+      const passing = data.stopServices[view.stop].flatMap((svc) => data.lines[svc].flat());
+      if (passing.length) fitCoords(passing, 15);
+      else map.flyTo({ center: [s[0], s[1]], zoom: Math.max(map.getZoom(), 15.5), padding: pad(), duration: 700 });
       if (isMobile()) setSheet('');
     }
   }
@@ -1000,14 +1026,11 @@
   clearBtn.addEventListener('click', () => { q.value = ''; render(); q.focus(); });
 
   body.addEventListener('click', (e) => {
-    const el = /** @type {HTMLElement | null} */ ((/** @type {HTMLElement} */ (e.target)).closest('[data-svc],[data-stop],[data-dir],[data-back],[data-passing]'));
+    const el = /** @type {HTMLElement | null} */ ((/** @type {HTMLElement} */ (e.target)).closest('[data-svc],[data-stop],[data-dir],[data-back]'));
     if (!el || !data) return;
     sound.play(el.dataset.back !== undefined ? 'close' : el.dataset.svc ? 'bus' : el.dataset.stop ? 'stop' : 'tick');
     if (el.dataset.back !== undefined) {
       return view.kind === 'service' && fromStop >= 0 ? go({ kind: 'stop', stop: fromStop }) : go({ kind: 'home' }, { fly: false });
-    }
-    if (el.dataset.passing !== undefined && view.kind === 'stop') {
-      return fitCoords(data.stopServices[view.stop].flatMap((svc) => data.lines[svc].flat()), 15);
     }
     if (el.dataset.svc) return go({ kind: 'service', svc: +el.dataset.svc, dir: +(el.dataset.dir ?? 0) });
     if (el.dataset.stop) {
