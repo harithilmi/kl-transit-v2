@@ -128,10 +128,11 @@
       font-variant-numeric: tabular-nums; letter-spacing: -0.01em; white-space: nowrap; flex: none;
     }
     .row > .badge { min-width: 60px; } /* one column width so names line up */
-    /* Rail transfer: round, flat, in the line's official colour (bus badges are squarer) */
+    /* Rail transfer: same shape as a small bus badge, in the line's official colour */
     .rail {
-      display: inline-flex; align-items: center; height: 19px; padding: 0 7px; border-radius: 999px;
-      background: var(--c); font-size: 11px; font-weight: 800; letter-spacing: 0.02em;
+      display: inline-grid; place-items: center; height: 19px; padding: 0 5px; border-radius: 5px; vertical-align: middle;
+      background: linear-gradient(90deg, var(--c) 30%, color-mix(in oklab, var(--c) 78%, white));
+      font-size: 11px; font-weight: 800; letter-spacing: -0.01em; white-space: nowrap;
     }
     .rail-list { display: grid; gap: 4px; font-size: 13px; font-weight: 600; }
     .rail-list .s { color: var(--ink-3); font-weight: 500; }
