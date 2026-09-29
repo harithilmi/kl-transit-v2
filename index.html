@@ -133,6 +133,8 @@
       display: inline-flex; align-items: center; height: 19px; padding: 0 7px; border-radius: 999px;
       background: var(--c); font-size: 11px; font-weight: 800; letter-spacing: 0.02em;
     }
+    .rail-list { display: grid; gap: 4px; font-size: 13px; font-weight: 600; }
+    .rail-list .s { color: var(--ink-3); font-weight: 500; }
     .badge.sm { min-width: 0; height: 19px; padding: 0 5px; border-radius: 5px; font-size: 11px; }
     .badge.lg { height: 34px; min-width: 60px; font-size: 17px; border-radius: 9px; }
 
@@ -604,7 +606,7 @@
     fetch('data/transit.json').then((r) => (r.ok ? r.json() : null)).then((/** @type {Transit | null} */ t) => {
       if (!t) return;
       transit = t;
-      if (view.kind === 'service') render(); // transfer chips need it
+      if (view.kind === 'service' || view.kind === 'stop') render(); // transfer chips need it
       source('transit').setData(fc(t.lines.flatMap((l) => l.pieces.map((p) => ({ type: 'Feature',
         properties: { mode: l.mode, color: l.color, name: l.name, ink: readable(l.color), s: p.s, n: p.n },
         geometry: { type: 'LineString', coordinates: p.c } })))));
@@ -1001,6 +1003,16 @@
       `<span class="rail" style="--c:${line.color};color:${inkOn(line.color)}" title="${escapeHtml(`${line.name} · ${station} · ${Math.round(d / 10) * 10} m`)}">${railCode(line)}</span>`).join('');
   }
 
+  /** Stop panel: each nearby line with its station and walk */
+  function railList(/** @type {number} */ stop) {
+    const near = railNear(stop);
+    if (!near.length) return '';
+    const byStation = Map.groupBy(near, (n) => n.station);
+    return `<div class="rail-list">${[...byStation].map(([station, ls]) =>
+      `<div>${ls.map(({ line }) => `<span class="rail" style="--c:${line.color};color:${inkOn(line.color)}">${railCode(line)}</span>`).join(' ')}
+        ${escapeHtml(station)} <span class="s">· ${distance(ls[0].d)} walk</span></div>`).join('')}</div>`;
+  }
+
   function badges(/** @type {number[]} */ svcs) {
     if (!data || !svcs.length) return '';
     const { services } = data.region;
@@ -1130,6 +1142,7 @@
         <button class="close-x" data-back aria-label="Close">✕</button>
         <div class="title-row">
           <div><h2>${escapeHtml(st[2])}</h2>${st[3] ? `<div class="op"><span class="code-tag">${escapeHtml(st[3])}</span></div>` : ''}</div></div>
+        ${railList(stopIdx)}
         ${passing.length ? `<button class="chip-btn" data-passing aria-pressed="${showAll}">${showAll ? 'Hide' : 'Show all'} passing routes</button>` : ''}
       </div>
       ${rows || '<div class="empty">No buses</div>'}`;
