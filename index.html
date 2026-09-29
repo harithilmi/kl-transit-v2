@@ -695,6 +695,12 @@
   /** Selected stop: drawn by the pin layers, hidden from the regular stop layers */
   function setPin(/** @type {number} */ stop) {
     source('pin').setData(fc(stop >= 0 ? [point(stop)] : []));
+    // Pin takes the stop's bus colour, same as its lines
+    const color = stop >= 0 ? stopColor(stop) : STOP;
+    const icon = `stop-icon-${color}`;
+    if (!map.hasImage(icon)) map.addImage(icon, stopIcon(color, 13), { pixelRatio: 2 });
+    map.setLayoutProperty('pin-icon', 'icon-image', icon);
+    map.setPaintProperty('pin-halo', 'circle-stroke-color', color);
     const others = stop >= 0 ? ['!=', ['get', 'i'], stop] : null;
     for (const id of ['stops', 'stops-icon']) map.setFilter(id, others);
     // Route view: the pin carries the label, so the route's own stop label steps aside
