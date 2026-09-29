@@ -414,6 +414,9 @@
   const toMin = (/** @type {string} */ t) => +t.slice(0, 2) * 60 + +t.slice(2);
 
   /** Weekday timetable only: "Starts 06:00" / "Ended for today", or '' while running (and on weekends) */
+  /** " via Juaseh" from the route name: tells apart buses with the same ends (N10A/N10B) */
+  const viaOf = (/** @type {Service} */ svc) => svc.name.match(/ via .+$/i)?.[0] ?? '';
+
   function runningNote(/** @type {Pattern} */ p) {
     const d = new Date();
     if (!p.first || !p.last || d.getDay() === 0 || d.getDay() === 6) return '';
@@ -1020,7 +1023,7 @@
     const hw = headway(p);
     const dirs = svc.patterns.length > 1
       ? `<div class="dirs">${svc.patterns.map((pt, d) => `
-          <button class="${d === dir ? 'active' : ''}" data-dir="${d}"><span>${pt.loop ? 'Loop via' : 'To'} <b>${escapeHtml(pt.to)}</b></span></button>`).join('')}</div>`
+          <button class="${d === dir ? 'active' : ''}" data-dir="${d}"><span>${pt.loop ? 'Loop via' : 'To'} <b>${escapeHtml(pt.to)}</b>${pt.loop ? '' : escapeHtml(viaOf(svc))}</span></button>`).join('')}</div>`
       : ''; // one direction: the title already says where it goes
 
     const rows = p.stops.map((s, k) => {
@@ -1058,7 +1061,7 @@
       // Directions that serve this stop (not as their last stop)
       const dirs = svc.patterns.map((p, d) => ({ p, d, k: p.stops.indexOf(stopIdx) })).filter(({ p, k }) => k >= 0 && k < p.stops.length - 1);
       const main = dirs[0] ?? { p: svc.patterns[0], d: 0, k: 0 };
-      const toText = dirs.length ? dirs.map(({ p }) => `${p.loop ? 'Loop via' : 'To'} ${escapeHtml(p.to)}`).join(' · ') : 'Ends here';
+      const toText = dirs.length ? dirs.map(({ p }) => `${p.loop ? 'Loop via' : 'To'} ${escapeHtml(p.to)}${p.loop ? '' : escapeHtml(viaOf(svc))}`).join(' · ') : 'Ends here';
       const every = headway(main.p);
       return `<button class="row" data-svc="${svcIdx}" data-dir="${main.d}">
           ${badge(svc)}
