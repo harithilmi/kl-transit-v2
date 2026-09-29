@@ -24,7 +24,7 @@ OUT = ROOT / "data" / "transit.json"
 TMP = Path("/tmp")
 RAIL, KTM = TMP / "rail", TMP / "ktm"
 PBF = Path.home() / "valhalla/malaysia/malaysia-singapore-brunei-latest.osm.pbf"
-CACHE_PBF, CACHE_GEO = TMP / "transit-overlay-v2.osm.pbf", TMP / "transit-overlay-v2.geojsonseq"
+CACHE_PBF, CACHE_GEO = TMP / "transit-overlay-v3.osm.pbf", TMP / "transit-overlay-v3.geojsonseq"
 FEEDS = {
     RAIL: "https://api.data.gov.my/gtfs-static/prasarana?category=rapid-rail-kl",
     KTM: "https://api.data.gov.my/gtfs-static/ktmb",
@@ -135,7 +135,7 @@ def osm() -> tuple[dict[str, dict], list[str]]:
     """Returns ({'w123': feature, 'n45': feature}, relation OPL lines)."""
     if not CACHE_PBF.exists():
         subprocess.run(["osmium", "tags-filter", "-O", "-o", CACHE_PBF, PBF,
-                        "w/railway=rail", "w/route=ferry", "r/route=train,ferry,subway,light_rail,monorail"], check=True)
+                        "w/railway=rail", "w/route=ferry", "n/amenity=ferry_terminal", "r/route=train,ferry,subway,light_rail,monorail"], check=True)
     if not CACHE_GEO.exists():
         subprocess.run(["osmium", "export", "-O", "-f", "geojsonseq", "-u", "type_id",
                         "--geometry-types=linestring,point", "-o", CACHE_GEO, CACHE_PBF], check=True)
@@ -401,6 +401,28 @@ def ferries(feats: dict[str, dict]) -> tuple[list[Line], list[dict]]:
     return lines, stations
 
 
+# Kuching's penambang: small boats across the Sarawak River. Unnamed ferry ways along the waterfront, one line
+PENAMBANG_BOX = (110.30, 1.54, 110.40, 1.58)  # w, s, e, n
+
+
+def penambang(feats: dict[str, dict]) -> tuple[list[Line], list[dict]]:
+    w, s, e, n = PENAMBANG_BOX
+    inside = lambda c: w <= c[0] <= e and s <= c[1] <= n
+    ways = [LineString(f["geometry"]["coordinates"]) for f in feats.values()
+            if f["properties"].get("route") == "ferry" and not f["properties"].get("name")
+            and f["geometry"]["type"] == "LineString" and all(map(inside, f["geometry"]["coordinates"]))]
+    if not ways:
+        return [], []
+    merged = linemerge(ways)
+    geom = merged if isinstance(merged, MultiLineString) else MultiLineString([merged])
+    # Jetties on the crossings (within ~120 m of a boat line)
+    stations = [{"name": nice(f["properties"].get("name:en") or f["properties"]["name"]), "lng": x, "lat": y, "lines": ["PNB"]}
+                for f in feats.values() if f["properties"].get("amenity") == "ferry_terminal" and f["properties"].get("name")
+                and f["geometry"]["type"] == "Point" and inside(c := f["geometry"]["coordinates"])
+                and geom.distance(Point(c)) < 0.0011 for x, y in [c]]
+    return [Line("PNB", "Penambang (Sarawak River)", "PNB", "ferry", FERRY_COLOR, geom)], stations
+
+
 # ---------- stations: merge interchanges ----------
 
 MODE_RANK = ["mrt", "lrt", "monorail", "brt", "airport", "komuter", "ets", "ferry"]
@@ -498,6 +520,8 @@ def main() -> None:
     k_lines, k_st, gaps = ktm(feats)
     a_lines, a_st = airport(feats, rels)
     f_lines, f_st = ferries(feats)
+    p_lines, p_st = penambang(feats)
+    f_lines, f_st = f_lines + p_lines, f_st + p_st
     lines = r_lines + a_lines + k_lines + f_lines
     mode_of = {l.id: l.mode for l in lines}
     stations = merge_stations(r_st + k_st + a_st + f_st, mode_of)
