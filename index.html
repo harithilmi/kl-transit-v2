@@ -943,11 +943,8 @@
       fitCoords(data.lines[view.svc][view.dir]);
       if (isMobile()) setSheet('');
     } else if (view.kind === 'stop') {
-      // Show every bus through the stop right away
       const s = data.region.stops[view.stop];
-      const passing = data.stopServices[view.stop].flatMap((svc) => data.lines[svc].flat());
-      if (passing.length) fitCoords(passing, 15);
-      else map.flyTo({ center: [s[0], s[1]], zoom: Math.max(map.getZoom(), 15.5), padding: pad(), duration: 700 });
+      map.flyTo({ center: [s[0], s[1]], zoom: Math.max(map.getZoom(), 15.5), padding: pad(), duration: 700 });
       if (isMobile()) setSheet('');
     }
   }
