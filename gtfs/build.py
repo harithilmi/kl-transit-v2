@@ -345,7 +345,7 @@ def build_feed(feed: str, op_idx: int, stops: StopIndex):
         # Loop service: both directions identical → keep one
         if len(svc["patterns"]) == 2 and svc["patterns"][0]["stops"] == svc["patterns"][1]["stops"]:
             svc["patterns"].pop()
-        # busrouter-style name: A ⇄ B (two ways) · A ⟲ B (loop) · A → B (one way).
+        # Route name: A ⇄ B (two ways) · A ⟲ B (loop) · A → B (one way).
         # Prefer the feed's own "A - B" route name (names areas, e.g. "Medan Kidd - Bercham via Taman Ipoh");
         # otherwise derive it from the end stops.
         p0 = svc["patterns"][0]

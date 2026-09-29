@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#f4f2ee" />
-  <title>Bas Router MY</title>
+  <title>KL Transit</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%231363b8'/%3E%3Crect x='8' y='7' width='16' height='16' rx='3' fill='%23fff'/%3E%3Crect x='10' y='10' width='12' height='6' rx='1' fill='%231363b8'/%3E%3Ccircle cx='11.5' cy='26' r='2' fill='%23fff'/%3E%3Ccircle cx='20.5' cy='26' r='2' fill='%23fff'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" />
   <style>
@@ -146,7 +146,7 @@
     .row:hover, .row.hl { background: var(--hover); }
     .row .main { min-width: 0; flex: 1; }
     .row .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    /* Route names wrap to two lines (busrouter-style) so the destination isn't cut off */
+    /* Route names wrap to two lines so the destination isn't cut off */
     .row .t.wrap { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.3; }
     .row .s { color: var(--ink-3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .row .code { color: var(--ink-3); font-weight: 700; font-size: 11px; font-variant-numeric: tabular-nums; }
@@ -273,7 +273,7 @@
     <button class="handle" id="handle" aria-label="Resize panel"></button>
     <div class="head">
       <div class="brand">
-        <h1>Bas Router <span>MY</span></h1>
+        <h1>KL <span>Transit</span></h1>
         <div class="city">
           <button class="region" id="region" aria-haspopup="listbox" aria-expanded="false" aria-label="City"></button>
           <ul class="city-menu glass" id="city-menu" role="listbox" hidden></ul>
@@ -615,7 +615,7 @@
         geometry: { type: 'Point', coordinates: [st.lng, st.lat] } }))));
     });
 
-    // Stops, busrouter-style: a plain dot at every zoom (no bus glyph) · 15+ code beside it · 16+ code + name.
+    // Stops: a plain dot at every zoom (no bus glyph) · 15+ code beside it · 16+ code + name.
     // No special terminus icons: Malaysian route ends aren't SG-style interchanges.
     // MY riders know stops by name (codes aren't on most poles, unlike SG): name leads, code is a small grey hint
     const hasCode = ['!=', ['coalesce', ['get', 'code'], ''], ''];
@@ -659,7 +659,7 @@
     map.addLayer({ id: 'sel-line', type: 'line', source: 'sel', layout: round,
       paint: { 'line-color': ['get', 'color'], 'line-gradient': gradient(STOP), 'line-width': routeWidth(0), 'line-offset': offset,
         'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, ['case', ['boolean', ['get', 'dim'], false], 0.25, 0.85], 16, ['case', ['boolean', ['get', 'dim'], false], 0.2, 0.55]] } });
-    // Direction arrows beside the line, on the travel (left) side — busrouter-style
+    // Direction arrows beside the line, on the travel (left) side
     map.addLayer({ id: 'sel-arrows', type: 'symbol', source: 'sel', minzoom: 12,
       filter: ['!', ['boolean', ['get', 'dim'], false]],
       layout: {
@@ -679,7 +679,7 @@
       },
       paint: { 'text-color': ['get', 'color'], 'text-halo-color': '#ffffff', 'text-halo-width': 2 } });
 
-    // Stops sit on top of route lines (busrouter does the same)
+    // Stops sit on top of route lines
     for (const id of ['stops', 'stops-icon']) map.moveLayer(id);
 
     map.addSource('sel-stops', { type: 'geojson', data: fc([]) });
@@ -714,7 +714,7 @@
 
     // Selected stop
     map.addSource('pin', { type: 'geojson', data: fc([]) });
-    // busrouter's selected stop: the dot, bigger, white with a thick ring in the bus colour
+    // Selected stop: the dot, bigger, white with a thick ring in the bus colour
     map.addLayer({ id: 'pin-halo', type: 'circle', source: 'pin',
       paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 6, 15, 10, 18, 12], 'circle-color': '#ffffff',
         'circle-stroke-color': STOP, 'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 10, 3, 15, 4.5] } });
@@ -751,7 +751,7 @@
     return /** @type {GeoJSON.Feature} */ ({ type: 'Feature', properties: { i, name: s[2], code: s[3], ...props }, geometry: { type: 'Point', coordinates: [s[0], s[1]] } });
   };
 
-  // busrouter-style gradient along the line, kept in the route's own hue: colour → lighter tint → colour
+  // Gradient along the line, kept in the route's own hue: colour → lighter tint → colour
   // (line-gradient can't read feature props, so it's set per selection)
   function gradient(/** @type {string} */ hex) {
     const n = parseInt(hex.slice(1), 16);
@@ -1361,7 +1361,7 @@
     }
     if (el.dataset.stop) {
       const stop = +el.dataset.stop;
-      // Any stop row in the sidebar (busrouter-style): 1st tap zooms to the stop, 2nd opens it
+      // Any stop row in the sidebar: 1st tap zooms to the stop, 2nd opens it
       if (peeked !== stop && !(view.kind === 'stop' && view.stop === stop)) return peekStop(stop);
       return go({ kind: 'stop', stop });
     }
