@@ -966,7 +966,7 @@
   }
 
   /** @param {View} next @param {{ fly?: boolean }} opts */
-  let peeked = -1;
+  let peeked = -1, peekedSvc = -1;
   function peekStop(/** @type {number} */ stop) {
     if (!data) return;
     peeked = stop; // zoom only (no highlight); the stop is selected on the 2nd tap
@@ -976,7 +976,7 @@
 
   let fromStop = -1; // stop a bus was opened from, so ✕ returns there
   function go(next, { fly = true } = {}) {
-    peeked = -1;
+    peeked = peekedSvc = -1;
     if (next.kind === 'service') fromStop = view.kind === 'stop' ? view.stop : view.kind === 'service' ? fromStop : -1;
     view = next;
     render();
@@ -1083,7 +1083,16 @@
     if (el.dataset.back !== undefined) {
       return view.kind === 'service' && fromStop >= 0 ? go({ kind: 'stop', stop: fromStop }) : go({ kind: 'home' }, { fly: false });
     }
-    if (el.dataset.svc) return go({ kind: 'service', svc: +el.dataset.svc, dir: +(el.dataset.dir ?? 0) });
+    if (el.dataset.svc) {
+      const svc = +el.dataset.svc, dir = +(el.dataset.dir ?? 0);
+      // At a stop, like stop rows: 1st tap frames the bus's route, 2nd opens it
+      if (view.kind === 'stop' && peekedSvc !== svc) {
+        peekedSvc = svc;
+        focusService(svc);
+        return fitCoords(data.lines[svc][dir]);
+      }
+      return go({ kind: 'service', svc, dir });
+    }
     if (el.dataset.stop) {
       const stop = +el.dataset.stop;
       // Any stop row in the sidebar (busrouter-style): 1st tap zooms to the stop, 2nd opens it
@@ -1117,7 +1126,7 @@
       for (const row of body.querySelectorAll('[data-svc]')) row.classList.toggle('hl', +(/** @type {HTMLElement} */ (row).dataset.svc ?? -1) === svcIdx);
     }
   }
-  body.addEventListener('pointerleave', () => { hovered = -1; hoverStop(-1); drawSelection(); });
+  body.addEventListener('pointerleave', () => { hovered = -1; hoverStop(-1); drawSelection(); if (peekedSvc >= 0) focusService(peekedSvc); });
 
   function hoverStop(/** @type {number} */ stop) {
     if (!data || stop === hoveredStop) return;
@@ -1174,6 +1183,13 @@
     }
     tip.classList.toggle('show', Boolean(showTip));
   });
+  let hoveredArea = '';
+  function hoverArea(/** @type {string} */ id) {
+    if (id === hoveredArea) return;
+    if (hoveredArea) map.setFeatureState({ source: 'areas', id: hoveredArea }, { hover: false });
+    if (id) map.setFeatureState({ source: 'areas', id }, { hover: true });
+    hoveredArea = id;
+  }
   map.on('movestart', () => tip.classList.remove('show'));
   map.getCanvas().addEventListener('mouseleave', () => { tip.classList.remove('show'); hoverArea(''); });
 
