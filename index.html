@@ -287,6 +287,7 @@
 <script type="module">
   // @ts-check
 
+  /** @typedef {{ lines: { id: string, name: string, mode: string, color: string, coords: GeoJSON.Position[][] }[], stations: { name: string, lng: number, lat: number, lines: string[], mode: string }[] }} Transit */
   /**
    * @typedef {[lng: number, lat: number, name: string, code: string]} Stop
    * @typedef {{ to: string, loop: boolean, stops: number[], mins: number[] | null, shape: string, trips: number, first: string | null, last: string | null }} Pattern
@@ -564,6 +565,37 @@
     map.addLayer({ id: 'area-label', type: 'symbol', source: 'area-names', maxzoom: 12, filter: ['!=', ['get', 'id'], ''],
       layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Bold'], 'text-size': 12 },
       paint: { 'text-color': ACCENT, 'text-opacity': 0.75, 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 } });
+
+    // Rail + ferry (Apple Maps transit style): official colours on a white casing, stations as white dots with a dark ring.
+    // Context only: drawn under the bus layers and never clickable
+    map.addSource('transit', { type: 'geojson', data: fc([]) });
+    map.addSource('stations', { type: 'geojson', data: fc([]) });
+    const ferry = ['==', ['get', 'mode'], 'ferry'];
+    const minor = ['==', ['get', 'mode'], 'ets']; // intercity: thinner, fainter
+    const railWidth = (/** @type {number} */ extra) => ['interpolate', ['linear'], ['zoom'],
+      8, ['+', ['case', minor, 0.6, 1], extra], 12, ['+', ['case', minor, 1, 1.8], extra], 16, ['+', ['case', minor, 1.8, 3.5], extra]];
+    map.addLayer({ id: 'transit-casing', type: 'line', source: 'transit', filter: ['!', ferry], layout: round,
+      paint: { 'line-color': '#ffffff', 'line-width': railWidth(2), 'line-opacity': 0.5 } });
+    map.addLayer({ id: 'transit-line', type: 'line', source: 'transit', filter: ['!', ferry], layout: round,
+      paint: { 'line-color': ['get', 'color'], 'line-width': railWidth(0), 'line-opacity': ['case', minor, 0.25, 0.45] } });
+    map.addLayer({ id: 'transit-ferry', type: 'line', source: 'transit', filter: ferry, layout: { 'line-cap': 'round' },
+      paint: { 'line-color': '#2a8bd6', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1, 14, 2.5], 'line-dasharray': [1, 2], 'line-opacity': 0.5 } });
+    const interchange = ['>', ['length', ['get', 'lines']], 1];
+    map.addLayer({ id: 'station-dot', type: 'circle', source: 'stations', minzoom: 11,
+      paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, ['case', interchange, 3.5, 2.5], 16, ['case', interchange, 7, 5]],
+        'circle-color': '#ffffff', 'circle-stroke-color': '#8a8f9c', 'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 11, 1, 16, 2] } });
+    map.addLayer({ id: 'station-label', type: 'symbol', source: 'stations', minzoom: 13,
+      layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Bold'], 'text-size': ['case', interchange, 12, 11],
+        'text-variable-anchor': ['top', 'bottom', 'left', 'right'], 'text-radial-offset': 0.8, 'text-max-width': 9, 'text-optional': true,
+        'symbol-sort-key': ['case', interchange, 0, 1] },
+      paint: { 'text-color': '#7a8190', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 } });
+    fetch('data/transit.json').then((r) => (r.ok ? r.json() : null)).then((/** @type {Transit | null} */ t) => {
+      if (!t) return;
+      source('transit').setData(fc(t.lines.map((l) => ({ type: 'Feature', properties: { mode: l.mode, color: l.color },
+        geometry: { type: 'MultiLineString', coordinates: l.coords } }))));
+      source('stations').setData(fc(t.stations.map((st) => ({ type: 'Feature', properties: { name: st.name, lines: st.lines, mode: st.mode },
+        geometry: { type: 'Point', coordinates: [st.lng, st.lat] } }))));
+    });
 
     // Stops by zoom (busrouter's principle, one level later so the map stays calm): < 15 dots · 15+ icons · 16+ code · 17+ name + code.
     // No special terminus icons: Malaysian route ends aren't SG-style interchanges.
