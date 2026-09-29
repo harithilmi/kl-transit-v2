@@ -99,6 +99,7 @@ def tidy(name: str) -> str:
     name = re.sub(r"\bStesen (?=(LRT|MRT|BRT|KTM|Monorel)\b)", "", name)  # "Stesen MRT X" → "MRT X"
     name = re.sub(r"([a-z]{3,})(\d)", r"\1 \2", name)  # "Terminal1" → "Terminal 1"
     name = re.sub(r"\bVia\b", "via", name)
+    name = re.sub(r"\bhab\b", "HAB", name, flags=re.I)  # Hentian Akhir Bandar, an acronym
     name = re.sub(r"\b[A-Z]{4,}\b", lambda m: m[0] if m[0] in ACRONYMS else m[0].capitalize(), name)  # "PORT" → "Port"
     return re.sub(r"\s+", " ", name).strip()
 
