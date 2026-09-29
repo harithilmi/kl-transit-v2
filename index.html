@@ -128,6 +128,11 @@
       font-variant-numeric: tabular-nums; letter-spacing: -0.01em; white-space: nowrap; flex: none;
     }
     .row > .badge { min-width: 60px; } /* one column width so names line up */
+    /* Rail transfer: round, flat, in the line's official colour (bus badges are squarer) */
+    .rail {
+      display: inline-flex; align-items: center; height: 19px; padding: 0 7px; border-radius: 999px;
+      background: var(--c); font-size: 11px; font-weight: 800; letter-spacing: 0.02em;
+    }
     .badge.sm { min-width: 0; height: 19px; padding: 0 5px; border-radius: 5px; font-size: 11px; }
     .badge.lg { height: 34px; min-width: 60px; font-size: 17px; border-radius: 9px; }
 
@@ -598,6 +603,8 @@
     };
     fetch('data/transit.json').then((r) => (r.ok ? r.json() : null)).then((/** @type {Transit | null} */ t) => {
       if (!t) return;
+      transit = t;
+      if (view.kind === 'service') render(); // transfer chips need it
       source('transit').setData(fc(t.lines.flatMap((l) => l.pieces.map((p) => ({ type: 'Feature',
         properties: { mode: l.mode, color: l.color, name: l.name, ink: readable(l.color), s: p.s, n: p.n },
         geometry: { type: 'LineString', coordinates: p.c } })))));
@@ -955,10 +962,57 @@
   // ---------- Panel views ----------
 
   /** Small badges for a list of services, all of them (they wrap) */
+  // ---------- Rail transfers ----------
+
+  /** @type {Transit | null} */
+  let transit = null;
+  const WALK_TO_RAIL = 300; // m
+  /** Short code riders see on signage */
+  const RAIL_CODE = /** @type {Record<string, string>} */ ({ PH: 'SP', KGL: 'KG', PYL: 'PY' });
+  const railCode = (/** @type {Transit['lines'][number]} */ l) =>
+    l.mode === 'komuter' ? 'KTM' : l.mode === 'ferry' ? 'Ferry' : l.mode === 'ets' ? 'ETS' : RAIL_CODE[l.id] ?? l.id;
+  /** Light line colours (MRT yellow) need dark text */
+  const inkOn = (/** @type {string} */ hex) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    return 0.299 * r + 0.587 * g + 0.114 * b > 170 ? '#1d1d1f' : '#fff';
+  };
+
+  /** Rail/ferry lines at stations within a short walk of a stop, nearest first */
+  function railNear(/** @type {number} */ stop) {
+    if (!transit || !data) return [];
+    const s = data.region.stops[stop];
+    /** @type {Map<string, { line: Transit['lines'][number], station: string, d: number }>} */
+    const found = new Map();
+    const near = transit.stations
+      .map((st) => ({ st, d: metres({ name: st.name, detail: '', lng: st.lng, lat: st.lat }, s) }))
+      .filter(({ d }) => d <= WALK_TO_RAIL)
+      .sort((a, b) => a.d - b.d);
+    for (const { st, d } of near) {
+      for (const id of st.lines) {
+        const line = transit.lines.find((l) => l.id === id);
+        if (line && !found.has(railCode(line) + line.color)) found.set(railCode(line) + line.color, { line, station: st.name, d });
+      }
+    }
+    return [...found.values()];
+  }
+
+  function railChips(/** @type {number} */ stop) {
+    return railNear(stop).map(({ line, station, d }) =>
+      `<span class="rail" style="--c:${line.color};color:${inkOn(line.color)}" title="${escapeHtml(`${line.name} · ${station} · ${Math.round(d / 10) * 10} m`)}">${railCode(line)}</span>`).join('');
+  }
+
   function badges(/** @type {number[]} */ svcs) {
     if (!data || !svcs.length) return '';
     const { services } = data.region;
     return `<div class="others">${svcs.map((s) => badge(services[s], 'sm')).join('')}</div>`;
+  }
+
+  /** Transfers at a stop on a route: rail first, then other buses */
+  function transfers(/** @type {number} */ stop, /** @type {number[]} */ svcs) {
+    const rail = railChips(stop);
+    if (!rail) return badges(svcs);
+    const { services } = /** @type {Region} */ (data?.region);
+    return `<div class="others">${rail}${svcs.map((s) => badge(services[s], 'sm')).join('')}</div>`;
   }
 
   function renderHome() {
@@ -1032,7 +1086,7 @@
       const others = stopServices[s].filter((o) => o !== svcIdx);
       return `<li class="${k === 0 || k === p.stops.length - 1 ? 'end' : ''}">
         <button class="row" data-stop="${s}">
-          <div class="main"><div class="t">${escapeHtml(st[2])}${st[3] ? ` <span class="code">${escapeHtml(st[3])}</span>` : ''}</div>${badges(others)}</div>
+          <div class="main"><div class="t">${escapeHtml(st[2])}${st[3] ? ` <span class="code">${escapeHtml(st[3])}</span>` : ''}</div>${transfers(s, others)}</div>
         </button></li>`;
     }).join('');
 
