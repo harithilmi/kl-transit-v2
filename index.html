@@ -147,6 +147,12 @@
       background: #fff; box-shadow: inset 0 0 0 2px #8a847a;
     }
     .stop-icon::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #8a847a; }
+    /* Searched place: same shape as a stop, filled in the map marker's red */
+    .place-icon { width: 26px; height: 26px; border-radius: 50%; flex: none; display: grid; place-items: center; background: #d6453a; }
+    .place-icon::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #fff; }
+    .row .dist { color: var(--ink-3); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .row.near { align-items: flex-start; }
+    .row.near > .stop-icon, .row.near > .dist { margin-top: 1px; }
 
     /* Detail views */
     .detail-head { position: relative; padding: 14px 16px 12px; display: grid; gap: 10px; }
@@ -286,7 +292,6 @@
 <script type="module">
   // @ts-check
 
-  /** @typedef {{ lines: { id: string, name: string, mode: string, color: string, pieces: { c: GeoJSON.Position[], s: number, n: number }[] }[], stations: { name: string, lng: number, lat: number, lines: string[], mode: string }[] }} Transit */
   /**
    * @typedef {[lng: number, lat: number, name: string, code: string]} Stop
    * @typedef {{ to: string, loop: boolean, stops: number[], mins: number[] | null, shape: string, trips: number, first: string | null, last: string | null }} Pattern
@@ -294,7 +299,8 @@
    * @typedef {{ id: string, name: string, color: string }} Operator
    * @typedef {{ id: string, name: string, bounds: [number, number, number, number], operators: Operator[], stops: Stop[], services: Service[] }} Region
    * @typedef {{ id: string, name: string, bounds: [number, number, number, number], operators: string[], services: number, stops: number, area: GeoJSON.Position[][][] }} RegionMeta
-   * @typedef {{ kind: 'home' } | { kind: 'service', svc: number, dir: number } | { kind: 'stop', stop: number }} View
+   * @typedef {{ name: string, detail: string, lng: number, lat: number }} Place
+   * @typedef {{ kind: 'home' } | { kind: 'service', svc: number, dir: number } | { kind: 'stop', stop: number } | { kind: 'place', place: Place }} View
    */
 
   /** @type {typeof import('maplibre-gl')} */
@@ -728,6 +734,21 @@
         'text-max-width': 12, 'text-line-height': 1.1, 'text-allow-overlap': true },
       paint: { 'text-color': STOP, 'text-halo-color': '#ffffff', 'text-halo-width': 1.2 } });
 
+    // Searched place: red dot + its name, inside a faint ring of the walk radius
+    map.addSource('place', { type: 'geojson', data: fc([]) });
+    // WALK metres in px: 512px tiles → m/px = 40075017·cos(lat) / (512·2^z). cos(~4°) is close enough for MY
+    const ringPx = WALK * 512 / (40075017 * Math.cos(4 * Math.PI / 180));
+    map.addLayer({ id: 'place-ring', type: 'circle', source: 'place',
+      paint: { 'circle-radius': ['interpolate', ['exponential', 2], ['zoom'], 0, ringPx, 22, ringPx * 2 ** 22],
+        'circle-color': PLACE, 'circle-opacity': 0.05, 'circle-stroke-color': PLACE, 'circle-stroke-width': 1.5, 'circle-stroke-opacity': 0.35 } });
+    map.addLayer({ id: 'place-dot', type: 'circle', source: 'place',
+      paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 6, 16, 9], 'circle-color': PLACE,
+        'circle-stroke-color': '#ffffff', 'circle-stroke-width': 3 } });
+    map.addLayer({ id: 'place-label', type: 'symbol', source: 'place',
+      layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Bold'], 'text-size': 13, 'text-anchor': 'top', 'text-offset': [0, 1],
+        'text-max-width': 12, 'text-allow-overlap': true, 'text-ignore-placement': true },
+      paint: { 'text-color': PLACE, 'text-halo-color': '#ffffff', 'text-halo-width': 2 } });
+
     document.querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show');
   });
 
@@ -831,6 +852,9 @@
     source('sel').setData(fc(sel));
     source('sel-stops').setData(fc(selStops));
     setPin(view.kind === 'stop' ? view.stop : -1);
+    // The place marker stays while you look at stops/buses opened from it
+    const place = view.kind === 'place' ? view.place : view.kind === 'home' ? null : fromPlace;
+    source('place').setData(fc(place ? [{ type: 'Feature', properties: { name: place.name }, geometry: { type: 'Point', coordinates: [place.lng, place.lat] } }] : []));
     const stopsVis = view.kind === 'service' ? 'none' : 'visible';
     for (const id of ['stops', 'stops-icon']) map.setLayoutProperty(id, 'visibility', stopsVis);
   }
@@ -843,7 +867,105 @@
     map.fitBounds(b, { padding: pad(), maxZoom, duration: 700 });
   }
 
+  // ---------- Place search (local Nominatim) ----------
+
+  /** @typedef {{ lines: { id: string, name: string, mode: string, color: string, pieces: { c: GeoJSON.Position[], s: number, n: number }[] }[], stations: { name: string, lng: number, lat: number, lines: string[], mode: string }[] }} Transit */
+  /** @typedef {{ lat: string, lon: string, name: string, display_name: string }} NominatimHit */
+
+  const NOMINATIM = 'http://localhost:8088/search';
+  /** Latest results. `down` = server off or still importing: back off for a while instead of retrying every keystroke */
+  const places = {
+    term: '',
+    /** @type {Place[]} */ hits: [],
+    /** @type {'idle' | 'loading' | 'ok' | 'down'} */ status: 'idle',
+  };
+  let placeCtl = new AbortController(), placeTimer = 0, downUntil = 0;
+
+  /** Nominatim hit → Place: its name plus a short "street, area" line */
+  function toPlace(/** @type {NominatimHit} */ h) {
+    const parts = h.display_name.split(', ').filter((p) => p !== 'Malaysia' && !/^\d{5}$/.test(p));
+    const name = h.name || parts[0];
+    return { name, detail: parts.filter((p) => p !== name).slice(0, 3).join(', '), lng: +h.lon, lat: +h.lat };
+  }
+
+  /** Debounced lookup; each keystroke cancels the previous request */
+  function searchPlaces(/** @type {string} */ term) {
+    clearTimeout(placeTimer);
+    placeCtl.abort();
+    if (term.length < 3) { places.term = ''; places.hits = []; places.status = 'idle'; return; }
+    if (term === places.term && places.status === 'ok') return;
+    if (Date.now() < downUntil) { places.hits = []; places.status = 'down'; return; }
+    places.status = 'loading';
+    const ctl = (placeCtl = new AbortController());
+    placeTimer = setTimeout(async () => {
+      // Bias (not limit) to the current city: other places still show up, just ranked lower
+      const [w, s, e, n] = regions.find((r) => r.id === regionId)?.bounds ?? regions[0].bounds;
+      const params = new URLSearchParams({ q: term, format: 'jsonv2', countrycodes: 'my', limit: '6', viewbox: `${w},${n},${e},${s}`, 'accept-language': 'en' });
+      try {
+        const res = await fetch(`${NOMINATIM}?${params}`, { signal: AbortSignal.any([ctl.signal, AbortSignal.timeout(5000)]) });
+        if (!res.ok) throw new Error(`Nominatim ${res.status}`);
+        /** @type {NominatimHit[]} */
+        const hits = await res.json();
+        places.hits = hits.map(toPlace);
+        places.status = 'ok';
+      } catch {
+        if (ctl.signal.aborted) return; // a newer keystroke took over
+        places.hits = [];
+        places.status = 'down';
+        downUntil = Date.now() + 30_000;
+      }
+      places.term = term;
+      if (view.kind === 'home' && q.value.trim().toLowerCase() === term) renderHome();
+    }, 300);
+  }
+
+  /** Is (x, y) inside a polygon ring? (ray casting) */
+  function inRing(/** @type {GeoJSON.Position[]} */ ring, /** @type {number} */ x, /** @type {number} */ y) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i], [xj, yj] = ring[j];
+      if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+
+  /** City serving a place: inside its stops' walk area first (some city boxes overlap), else its box. Current city wins ties */
+  function regionAt(/** @type {Place} */ { lng, lat }) {
+    const ordered = [...regions].sort((a, b) => Number(b.id === regionId) - Number(a.id === regionId));
+    return ordered.find((r) => r.area.some(([outer, ...holes]) => inRing(outer, lng, lat) && !holes.some((h) => inRing(h, lng, lat))))
+      ?? ordered.find(({ bounds: [w, s, e, n] }) => lng >= w && lng <= e && lat >= s && lat <= n);
+  }
+
+  function openPlace(/** @type {Place} */ place) {
+    const home = regionAt(place);
+    if (home && home.id !== regionId) setRegion(home.id, { kind: 'place', place });
+    else go({ kind: 'place', place });
+  }
+
+  /** Straight-line metres (equirectangular: plenty accurate at walking range) */
+  function metres(/** @type {Place} */ { lng, lat }, /** @type {Stop} */ [sLng, sLat]) {
+    const k = Math.PI / 180;
+    return Math.hypot((sLng - lng) * k * Math.cos(((lat + sLat) / 2) * k), (sLat - lat) * k) * 6371000;
+  }
+
+  /** Stops within WALK of a place, nearest first; if none, just the single nearest */
+  function nearStops(/** @type {Place} */ place) {
+    if (!data) return [];
+    const all = data.region.stops.map((s, i) => ({ i, d: metres(place, s) })).sort((a, b) => a.d - b.d);
+    const near = all.filter(({ d }) => d <= WALK);
+    return near.length ? near : all.slice(0, 1);
+  }
+
+  const distance = (/** @type {number} */ d) => (d < 1000 ? `${Math.round(d / 10) * 10} m` : `${(d / 1000).toFixed(1)} km`);
+
   // ---------- Panel views ----------
+
+  /** Small badges for a list of services, all of them (they wrap) */
+  function badges(/** @type {number[]} */ svcs) {
+    if (!data || !svcs.length) return '';
+    const { services } = data.region;
+    return `<div class="others">${svcs.map((s) => badge(services[s], 'sm')).join('')}</div>`;
+  }
 
   function renderHome() {
     if (!data) return;
@@ -877,9 +999,26 @@
         ${s[3] ? `<div class="s">${stopCode(s)}</div>` : ''}</div>
       </button>`).join('');
 
+    // Places: last results stay up while the next query loads, so the list doesn't flicker per keystroke
+    const hits = term.length >= 3 ? places.hits : [];
+    const placeRows = hits.map((p, k) => {
+      const other = regionAt(p);
+      return `
+      <button class="row" data-place="${k}">
+        <span class="place-icon"></span>
+        <div class="main"><div class="t">${escapeHtml(p.name)}</div>
+        <div class="s">${other && other.id !== regionId ? `${escapeHtml(other.name)} · ` : ''}${escapeHtml(p.detail)}</div></div>
+      </button>`;
+    }).join('');
+    const empty = !services.length && !stops.length && !hits.length
+      ? term.length >= 3 && places.status === 'loading' ? '<div class="empty">Searching places…</div>'
+      : `<div class="empty">Nothing matches “${escapeHtml(q.value)}”${places.status === 'down' ? '<div class="note">Place search unavailable</div>' : ''}</div>`
+      : '';
+
     body.innerHTML = (stops.length ? `<h3 class="section-title">Stops</h3>${stopRows}` : '')
       + (services.length ? `<h3 class="section-title">${term ? 'Buses' : `${services.length} buses`} ${ops}</h3>${svcRows}` : '')
-      + (!services.length && !stops.length ? `<div class="empty">Nothing matches “${escapeHtml(q.value)}”</div>` : '');
+      + (hits.length ? `<h3 class="section-title">Places</h3>${placeRows}` : '')
+      + empty;
   }
 
   function renderService(/** @type {number} */ svcIdx, /** @type {number} */ dir) {
@@ -899,7 +1038,7 @@
       const others = stopServices[s].filter((o) => o !== svcIdx);
       return `<li class="${k === 0 || k === p.stops.length - 1 ? 'end' : ''}">
         <button class="row" data-stop="${s}">
-          <div class="main"><div class="t">${escapeHtml(st[2])}${st[3] ? ` <span class="code">${escapeHtml(st[3])}</span>` : ''}</div>${others.length ? `<div class="others">${others.map((o) => badge(region.services[o], 'sm')).join('')}</div>` : ''}</div>
+          <div class="main"><div class="t">${escapeHtml(st[2])}${st[3] ? ` <span class="code">${escapeHtml(st[3])}</span>` : ''}</div>${badges(others)}</div>
         </button></li>`;
     }).join('');
 
@@ -947,10 +1086,39 @@
       ${rows || '<div class="empty">No buses</div>'}`;
   }
 
+  function renderPlace(/** @type {Place} */ place) {
+    if (!data) return;
+    const { region, stopServices } = data;
+    const near = nearStops(place);
+    const walkable = near.filter(({ d }) => d <= WALK).length;
+    const rows = near.map(({ i, d }) => {
+      const st = region.stops[i];
+      return `<button class="row near" data-stop="${i}">
+          <span class="stop-icon"></span>
+          <div class="main"><div class="t">${escapeHtml(st[2])}</div>
+            ${st[3] ? `<div class="s">${stopCode(st)}</div>` : ''}
+            ${badges(stopServices[i])}
+          </div>
+          <span class="dist">${distance(d)}</span>
+        </button>`;
+    }).join('');
+
+    body.innerHTML = `
+      <div class="detail-head">
+        <button class="close-x" data-back aria-label="Close">✕</button>
+        <div class="title-row"><span class="place-icon" style="width:34px;height:34px"></span>
+          <div><h2>${escapeHtml(place.name)}</h2>${place.detail ? `<div class="op">${escapeHtml(place.detail)}</div>` : ''}</div></div>
+        ${walkable ? '' : `<div class="note">No bus stops within ${WALK} m. Nearest one:</div>`}
+      </div>
+      <h3 class="section-title">${walkable ? `${walkable} stop${walkable === 1 ? '' : 's'} within ${WALK} m` : 'Nearest stop'}</h3>
+      ${rows}`;
+  }
+
   function render() {
     clearBtn.hidden = !q.value;
     if (view.kind === 'service') renderService(view.svc, view.dir);
     else if (view.kind === 'stop') renderStop(view.stop);
+    else if (view.kind === 'place') renderPlace(view.place);
     else renderHome();
     body.scrollTop = 0;
   }
@@ -962,7 +1130,8 @@
   function writeHash() {
     if (!data) return;
     const tail = view.kind === 'service' ? `/bus/${encodeURIComponent(data.keys[view.svc])}${view.dir ? '/2' : ''}`
-      : view.kind === 'stop' ? `/stop/${encodeURIComponent(data.stopKeys[view.stop])}` : '';
+      : view.kind === 'stop' ? `/stop/${encodeURIComponent(data.stopKeys[view.stop])}`
+      : view.kind === 'place' ? `/place/${view.place.lat.toFixed(5)},${view.place.lng.toFixed(5)}/${encodeURIComponent(view.place.name)}` : '';
     history.replaceState(null, '', `#/${regionId}${tail}`);
   }
 
@@ -976,9 +1145,13 @@
   }
 
   let fromStop = -1; // stop a bus was opened from, so ✕ returns there
+  /** @type {Place | null} place a stop was opened from (kept through its buses), so ✕ returns there */
+  let fromPlace = null;
   function go(next, { fly = true } = {}) {
     peeked = peekedSvc = -1;
     if (next.kind === 'service') fromStop = view.kind === 'stop' ? view.stop : view.kind === 'service' ? fromStop : -1;
+    if (next.kind === 'stop') fromPlace = view.kind === 'place' ? view.place : view.kind === 'service' ? fromPlace : null;
+    else if (next.kind !== 'service') fromPlace = null;
     view = next;
     render();
     drawSelection();
@@ -990,6 +1163,11 @@
     } else if (view.kind === 'stop') {
       const s = data.region.stops[view.stop];
       map.flyTo({ center: [s[0], s[1]], zoom: Math.max(map.getZoom(), 15.5), padding: pad(), duration: 700 });
+      if (isMobile()) setSheet('');
+    } else if (view.kind === 'place') {
+      const { place } = view, { stops } = data.region;
+      // Frame the place with the stops listed (or the lone nearest one)
+      fitCoords([[place.lng, place.lat], ...nearStops(place).map(({ i }) => /** @type {[number, number]} */ ([stops[i][0], stops[i][1]]))], 16.5);
       if (isMobile()) setSheet('');
     }
   }
@@ -1013,7 +1191,8 @@
   function fromHash() {
     const [, id, kind, key, dir] = location.hash.split('/');
     const meta = regions.find((r) => r.id === id) ?? regions[0];
-    return { id: meta.id, kind, key: key ? decodeURIComponent(key) : '', dir: dir === '2' ? 1 : 0 };
+    // `dir` is the bus direction, or a place's name in #/<city>/place/<lat>,<lng>/<name>
+    return { id: meta.id, kind, key: key ? decodeURIComponent(key) : '', dir: dir === '2' ? 1 : 0, name: dir ? decodeURIComponent(dir) : '' };
   }
 
   /** Resolve a hash key once the region is loaded */
@@ -1023,9 +1202,11 @@
     const { keys, stopKeys } = index(region);
     const svc = keys.indexOf(h.key);
     const stop = stopKeys.indexOf(h.key);
+    const [lat, lng] = h.key.split(',').map(Number);
     /** @type {View} */
     const next = h.kind === 'bus' && svc >= 0 ? { kind: 'service', svc, dir: Math.min(h.dir, region.services[svc].patterns.length - 1) }
       : h.kind === 'stop' && stop >= 0 ? { kind: 'stop', stop }
+      : h.kind === 'place' && Number.isFinite(lat) && Number.isFinite(lng) ? { kind: 'place', place: { name: h.name || 'Dropped pin', detail: '', lat, lng } }
       : { kind: 'home' };
     await setRegion(h.id, next);
   }
@@ -1061,7 +1242,10 @@
     }
   });
 
-  q.addEventListener('input', () => { if (view.kind !== 'home') go({ kind: 'home' }, { fly: false }); else render(); });
+  q.addEventListener('input', () => {
+    searchPlaces(q.value.trim().toLowerCase()); // first, so the list can say "Searching places…"
+    if (view.kind !== 'home') go({ kind: 'home' }, { fly: false }); else render();
+  });
   q.addEventListener('focus', () => { if (isMobile()) setSheet('expanded'); });
   // Enter opens the top result · Esc clears, then leaves the box
   q.addEventListener('keydown', (e) => {
@@ -1078,12 +1262,15 @@
   clearBtn.addEventListener('click', () => { q.value = ''; render(); q.focus(); });
 
   body.addEventListener('click', (e) => {
-    const el = /** @type {HTMLElement | null} */ ((/** @type {HTMLElement} */ (e.target)).closest('[data-svc],[data-stop],[data-dir],[data-back]'));
+    const el = /** @type {HTMLElement | null} */ ((/** @type {HTMLElement} */ (e.target)).closest('[data-svc],[data-stop],[data-dir],[data-back],[data-place]'));
     if (!el || !data) return;
-    sound.play(el.dataset.back !== undefined ? 'close' : el.dataset.svc ? 'bus' : el.dataset.stop ? 'stop' : 'tick');
+    sound.play(el.dataset.back !== undefined ? 'close' : el.dataset.svc ? 'bus' : el.dataset.stop || el.dataset.place ? 'stop' : 'tick');
     if (el.dataset.back !== undefined) {
-      return view.kind === 'service' && fromStop >= 0 ? go({ kind: 'stop', stop: fromStop }) : go({ kind: 'home' }, { fly: false });
+      return view.kind === 'service' && fromStop >= 0 ? go({ kind: 'stop', stop: fromStop })
+        : view.kind === 'stop' && fromPlace ? go({ kind: 'place', place: fromPlace })
+        : go({ kind: 'home' }, { fly: false });
     }
+    if (el.dataset.place) return openPlace(places.hits[+el.dataset.place]);
     if (el.dataset.svc) {
       const svc = +el.dataset.svc, dir = +(el.dataset.dir ?? 0);
       // At a stop, like stop rows: 1st tap frames the bus's route, 2nd opens it
