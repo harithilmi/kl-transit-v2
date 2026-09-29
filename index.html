@@ -1031,9 +1031,9 @@
     if (stop) {
       const i = stop.properties.i;
       sound.play('stop');
-      // Zoomed out (dots): each click zooms in closer on the stop. Zoomed in (icons): open it
+      // Zoomed out (dots): 1st click zooms to icon level, 2nd opens it
       if (map.getZoom() < PEEK_BELOW && peeked !== i && !(view.kind === 'stop' && view.stop === i)) {
-        return map.easeTo({ center: stop.geometry.type === 'Point' ? /** @type {[number, number]} */ (stop.geometry.coordinates) : e.lngLat, zoom: map.getZoom() + 2, padding: pad(), duration: 500 });
+        return map.easeTo({ center: stop.geometry.type === 'Point' ? /** @type {[number, number]} */ (stop.geometry.coordinates) : e.lngLat, zoom: PEEK_BELOW + 0.5, padding: pad(), duration: 500 });
       }
       return go({ kind: 'stop', stop: i });
     }
