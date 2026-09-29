@@ -1,0 +1,1088 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#f4f2ee" />
+  <title>Bas Router MY</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%231363b8'/%3E%3Crect x='8' y='7' width='16' height='16' rx='3' fill='%23fff'/%3E%3Crect x='10' y='10' width='12' height='6' rx='1' fill='%231363b8'/%3E%3Ccircle cx='11.5' cy='26' r='2' fill='%23fff'/%3E%3Ccircle cx='20.5' cy='26' r='2' fill='%23fff'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" />
+  <style>
+    :root {
+      --land: #f4f2ee;
+      --ink: #1d1d1f;
+      --ink-2: #5f5f64;
+      --ink-3: #9a9a9f;
+      --line: rgba(0, 0, 0, 0.07);
+      --hover: rgba(0, 0, 0, 0.04);
+      --chip: #ebe9e4;
+      --blue: #1a73e8;
+      --glass: rgba(255, 255, 255, 0.84);
+      --glass-edge: rgba(255, 255, 255, 0.95);
+      --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+      --panel-w: 380px;
+      --accent: #1363b8;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    body {
+      background: var(--land);
+      color: var(--ink);
+      font: 14px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button, input, select { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    #map { position: fixed; inset: 0; }
+    .maplibregl-ctrl-bottom-left { left: calc(var(--panel-w) + 12px); }
+
+    /* ---------- Glass ---------- */
+    .glass {
+      background: var(--glass);
+      -webkit-backdrop-filter: blur(14px) saturate(1.6);
+      backdrop-filter: blur(14px) saturate(1.6);
+      border: 1px solid var(--glass-edge);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 8px 28px rgba(0, 0, 0, 0.1);
+    }
+
+    .map-tools { position: fixed; top: 12px; right: 12px; display: grid; gap: 10px; z-index: 2; }
+    .round {
+      width: 40px; height: 40px; border-radius: 12px; border: 0; display: grid; place-items: center;
+      color: var(--ink-2); transition: transform 0.16s var(--ease-out), color 0.2s;
+    }
+    .round:active { transform: scale(0.94); }
+    .round svg { width: 20px; height: 20px; }
+    #sound .mute, #sound[aria-pressed='true'] .wave { display: inline; }
+    #sound .wave, #sound[aria-pressed='true'] .mute { display: none; }
+    .zoom-pair { display: grid; border-radius: 12px; overflow: hidden; }
+    .zoom-pair .round { border-radius: 0; background: none; box-shadow: none; font-size: 20px; font-weight: 500; }
+    .zoom-pair .round + .round { border-top: 1px solid var(--line); }
+
+    /* ---------- Panel ---------- */
+    .panel {
+      position: fixed; top: 12px; left: 12px; bottom: 12px; width: calc(var(--panel-w) - 12px);
+      border-radius: 18px; display: flex; flex-direction: column; overflow: hidden; z-index: 3;
+      animation: slide-in 0.45s var(--ease-out) both;
+    }
+    @keyframes slide-in { from { transform: translateX(-16px); opacity: 0; } }
+    .handle { display: none; }
+    .head { padding: 14px 14px 10px; display: grid; gap: 10px; border-bottom: 1px solid var(--line); }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand h1 { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -0.01em; }
+    .brand h1 span { color: var(--ink-3); font-weight: 600; }
+    .city { position: relative; margin-left: auto; }
+    .region {
+      appearance: none; border: 0; border-radius: 999px; padding: 6px 28px 6px 12px;
+      background: var(--chip) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235f5f64' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 11px center;
+      font-weight: 700; font-size: 13px; cursor: pointer; transition: transform 0.16s var(--ease-out);
+    }
+    .region:active { transform: scale(0.96); }
+    .city-menu {
+      position: absolute; top: calc(100% + 6px); right: 0; z-index: 5; width: 250px; margin: 0; padding: 6px;
+      list-style: none; border-radius: 14px; transform-origin: top right;
+      animation: pop 0.18s var(--ease-out) both;
+    }
+    .city-menu[hidden] { display: none; }
+    @keyframes pop { from { opacity: 0; transform: scale(0.96) translateY(-4px); } }
+    .city-menu button {
+      width: 100%; border: 0; background: none; text-align: left; border-radius: 9px; padding: 8px 10px;
+      display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 1px 8px; transition: background-color 0.15s;
+    }
+    .city-menu button:hover, .city-menu button:focus-visible { background: var(--hover); outline: none; }
+    .city-menu b { font-size: 14px; }
+    .city-menu small { grid-column: 1; color: var(--ink-3); font-size: 11px; font-weight: 600; }
+    .city-menu .tick { grid-row: 1 / 3; grid-column: 2; color: var(--accent); opacity: 0; }
+    .city-menu [aria-selected='true'] .tick { opacity: 1; }
+    .search { position: relative; }
+    .search svg { position: absolute; left: 11px; top: 50%; translate: 0 -50%; width: 17px; height: 17px; color: var(--ink-3); pointer-events: none; }
+    .search input {
+      width: 100%; border: 0; border-radius: 12px; padding: 10px 34px 10px 36px; background: #fff;
+      box-shadow: inset 0 0 0 1px var(--line); outline: none; font-size: 15px;
+      transition: box-shadow 0.2s;
+    }
+    .search input::-webkit-search-cancel-button { display: none; }
+    .search input:focus { box-shadow: inset 0 0 0 2px var(--accent); }
+    .search .clear {
+      position: absolute; right: 7px; top: 50%; translate: 0 -50%; width: 22px; height: 22px; border: 0;
+      border-radius: 50%; background: var(--chip); color: var(--ink-2); font-size: 13px; line-height: 1;
+    }
+    .body { flex: 1; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+    .section-title {
+      position: sticky; top: 0; z-index: 1; margin: 0; padding: 10px 16px 6px;
+      background: linear-gradient(var(--glass) 70%, transparent);
+      font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3);
+      display: flex; gap: 12px; align-items: center;
+    }
+    .op-key { display: inline-flex; align-items: center; gap: 5px; text-transform: none; letter-spacing: 0; font-weight: 600; }
+    .op-key i { width: 8px; height: 8px; border-radius: 3px; }
+    .empty { padding: 28px 16px; color: var(--ink-3); text-align: center; }
+
+    /* Service number badge */
+    .badge {
+      display: inline-grid; place-items: center; min-width: 46px; height: 26px; padding: 0 7px; border-radius: 7px;
+      background: var(--c, var(--accent)); color: #fff; font-weight: 800; font-size: 13px;
+      font-variant-numeric: tabular-nums; letter-spacing: -0.01em; white-space: nowrap; flex: none;
+    }
+    .row > .badge { min-width: 60px; } /* one column width so names line up */
+    .badge.sm { min-width: 0; height: 19px; padding: 0 5px; border-radius: 5px; font-size: 11px; }
+    .badge.lg { height: 34px; min-width: 60px; font-size: 17px; border-radius: 9px; }
+
+    .row {
+      width: 100%; border: 0; background: none; text-align: left; display: flex; align-items: center; gap: 12px;
+      padding: 9px 16px; transition: background-color 0.15s;
+    }
+    .row:hover, .row.hl { background: var(--hover); }
+    .row .main { min-width: 0; flex: 1; }
+    .row .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* Route names wrap to two lines (busrouter-style) so the destination isn't cut off */
+    .row .t.wrap { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.3; }
+    .row .s { color: var(--ink-3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row .code { color: var(--ink-3); font-weight: 700; font-size: 11px; font-variant-numeric: tabular-nums; }
+    .stop-icon {
+      width: 26px; height: 26px; border-radius: 50%; flex: none; display: grid; place-items: center;
+      background: #fff; box-shadow: inset 0 0 0 2px #8a847a;
+    }
+    .stop-icon::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #8a847a; }
+
+    /* Detail views */
+    .detail-head { position: relative; padding: 14px 16px 12px; display: grid; gap: 10px; }
+    .detail-head .title-row { padding-right: 30px; }
+    .close-x {
+      position: absolute; top: 12px; right: 12px; width: 26px; height: 26px; border: 0; border-radius: 50%;
+      background: rgba(0, 0, 0, 0.08); color: var(--ink-2); font-size: 15px; line-height: 1;
+      display: grid; place-items: center; transition: color 0.15s, transform 0.16s var(--ease-out);
+    }
+    .close-x:hover { color: var(--ink); }
+    .close-x:active { transform: scale(0.94); }
+    .title-row { display: flex; align-items: center; gap: 12px; }
+    .title-row h2 { margin: 0; font-size: 17px; line-height: 1.25; font-weight: 750; letter-spacing: -0.01em; }
+    .title-row .op { color: var(--ink-3); font-size: 12px; font-weight: 600; margin-top: 2px; }
+    .dirs { display: grid; gap: 4px; background: var(--chip); padding: 3px; border-radius: 11px; }
+    .dirs button {
+      border: 0; background: none; border-radius: 8px; padding: 7px 10px; text-align: left; color: var(--ink-2);
+      font-weight: 600; display: flex; gap: 6px; align-items: center; transition: background-color 0.2s, color 0.2s, box-shadow 0.2s;
+    }
+    .dirs button.active { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); }
+    .dirs button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .fact { background: #fff; border-radius: 11px; padding: 8px 10px; box-shadow: inset 0 0 0 1px var(--line); }
+    .fact b { display: block; font-size: 15px; font-variant-numeric: tabular-nums; }
+    .fact span { color: var(--ink-3); font-size: 11px; font-weight: 600; }
+    .note { color: var(--ink-3); font-size: 11px; }
+    .off { color: var(--ink-2); font-weight: 700; }
+    .off.ended { color: #b3261e; }
+
+    /* Stop timeline */
+    .timeline { list-style: none; margin: 0; padding: 4px 0 24px; }
+    .timeline li { position: relative; }
+    .timeline .row { padding-left: 46px; align-items: flex-start; }
+    .timeline li::before {
+      content: ''; position: absolute; left: 22px; top: 0; bottom: 0; width: 5px; background: var(--c); opacity: 0.9;
+    }
+    .timeline li:first-child::before { top: 18px; }
+    .timeline li:last-child::before { bottom: calc(100% - 18px); }
+    .timeline li::after {
+      content: ''; position: absolute; left: 18px; top: 13px; width: 13px; height: 13px; border-radius: 50%;
+      background: #fff; box-shadow: inset 0 0 0 3px var(--c); pointer-events: none;
+    }
+    .timeline li.end::after { width: 17px; height: 17px; left: 16px; top: 11px; box-shadow: inset 0 0 0 5px var(--c); }
+    .timeline .mins { color: var(--ink-3); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; padding-top: 1px; }
+    .others { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .chip-btn {
+      border: 0; border-radius: 999px; padding: 6px 12px; background: var(--chip); color: var(--ink-2);
+      font-weight: 700; font-size: 12px; transition: background-color 0.2s, color 0.2s, transform 0.16s var(--ease-out);
+    }
+    .chip-btn:active { transform: scale(0.96); }
+    .chip-btn[aria-pressed='true'] { background: var(--ink); color: #fff; }
+
+    .tip {
+      position: fixed; z-index: 4; pointer-events: none; padding: 4px 8px; border-radius: 8px; font-size: 12px; font-weight: 700;
+      background: var(--ink); color: #fff; white-space: nowrap; translate: -50% calc(-100% - 12px); opacity: 0; transition: opacity 0.12s;
+    }
+    .tip.show { opacity: 1; }
+    .tip .tag { display: inline-block; margin-right: 6px; padding: 0 5px; border-radius: 5px; background: #4a5264; font-variant-numeric: tabular-nums; }
+    .loading { position: fixed; left: 50%; top: 18px; translate: -50% 0; z-index: 4; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; color: var(--ink-2); }
+    .loading[hidden] { display: none; }
+
+    /* ---------- Mobile: bottom sheet ---------- */
+    @media (max-width: 800px) {
+      :root { --panel-w: 0px; --sheet: 46vh; }
+      .panel {
+        top: auto; left: 0; right: 0; bottom: 0; width: auto; height: var(--sheet); border-radius: 18px 18px 0 0;
+        border-bottom: 0; transition: height 0.35s var(--ease-out); animation-name: sheet-in;
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      @keyframes sheet-in { from { transform: translateY(24px); opacity: 0; } }
+      .panel.expanded { height: 86vh; }
+      .panel.peek { height: 150px; }
+      .handle { display: block; border: 0; background: none; padding: 8px 0 0; width: 100%; }
+      .handle::before { content: ''; display: block; margin: 0 auto; width: 38px; height: 5px; border-radius: 3px; background: #cfcbc3; }
+      .head { padding-top: 6px; }
+      .map-tools { top: max(12px, env(safe-area-inset-top)); }
+      .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { bottom: calc(var(--sheet) - 8px); }
+      .glass { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(255, 255, 255, 0.97); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div id="map" role="application" aria-label="Bus route map"></div>
+
+  <div class="map-tools">
+    <div class="zoom-pair glass">
+      <button class="round" id="zoom-in" aria-label="Zoom in">+</button>
+      <button class="round" id="zoom-out" aria-label="Zoom out">−</button>
+    </div>
+    <button class="round glass" id="sound" aria-label="Sound" aria-pressed="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path class="wave" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/><path class="mute" d="m16 9 6 6m0-6-6 6"/></svg>
+    </button>
+    <button class="round glass" id="locate" aria-label="Show my location">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+    </button>
+  </div>
+
+  <aside class="panel glass" id="panel">
+    <button class="handle" id="handle" aria-label="Resize panel"></button>
+    <div class="head">
+      <div class="brand">
+        <h1>Bas Router <span>MY</span></h1>
+        <div class="city">
+          <button class="region" id="region" aria-haspopup="listbox" aria-expanded="false" aria-label="City"></button>
+          <ul class="city-menu glass" id="city-menu" role="listbox" hidden></ul>
+        </div>
+      </div>
+      <label class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+        <input id="q" type="search" placeholder="Bus number or stop" autocomplete="off" spellcheck="false" enterkeyhint="search" />
+        <button class="clear" id="clear" aria-label="Clear search" hidden>✕</button>
+      </label>
+    </div>
+    <div class="body" id="body"></div>
+  </aside>
+
+  <div class="tip" id="tip"></div>
+  <div class="loading glass" id="loading" hidden>Loading…</div>
+
+<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+<script type="module">
+  // @ts-check
+
+  /**
+   * @typedef {[lng: number, lat: number, name: string, code: string]} Stop
+   * @typedef {{ to: string, loop: boolean, stops: number[], mins: number[] | null, shape: string, trips: number, first: string | null, last: string | null }} Pattern
+   * @typedef {{ no: string, name: string, op: number, color: string | null, patterns: Pattern[] }} Service
+   * @typedef {{ id: string, name: string, color: string }} Operator
+   * @typedef {{ id: string, name: string, bounds: [number, number, number, number], operators: Operator[], stops: Stop[], services: Service[] }} Region
+   * @typedef {{ id: string, name: string, bounds: [number, number, number, number], operators: string[], services: number, stops: number, area: GeoJSON.Position[][][] }} RegionMeta
+   * @typedef {{ kind: 'home' } | { kind: 'service', svc: number, dir: number } | { kind: 'stop', stop: number }} View
+   */
+
+  /** @type {typeof import('maplibre-gl')} */
+  // @ts-ignore – loaded from the CDN script tag
+  const maplibregl = window.maplibregl;
+
+  const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
+  const panel = $('panel'), body = $('body'), tip = $('tip'), loading = $('loading');
+  const q = /** @type {HTMLInputElement} */ ($('q'));
+  const regionBtn = $('region'), cityMenu = $('city-menu');
+  const clearBtn = $('clear');
+
+  const isMobile = () => innerWidth <= 800;
+  const escapeHtml = (/** @type {string} */ s) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+  // ---------- Sound: tiny synthesized cues on deliberate taps only (never hover) ----------
+
+  const sound = (() => {
+    /** @type {AudioContext | null} */
+    let ctx = null;
+    let on = localStorage.getItem('sound') !== 'off';
+    /** One soft sine blip: quick attack, exponential decay */
+    function blip(/** @type {number} */ freq, /** @type {number} */ at, /** @type {number} */ dur, gain = 0.05, endFreq = freq) {
+      if (!ctx) return;
+      const t = ctx.currentTime + at, o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(freq, t);
+      o.frequency.exponentialRampToValueAtTime(endFreq, t + dur);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(gain, t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(ctx.destination);
+      o.start(t);
+      o.stop(t + dur + 0.02);
+    }
+    const cues = {
+      bus: () => { blip(880, 0, 0.09); blip(1320, 0.05, 0.12, 0.035); },
+      stop: () => { blip(660, 0, 0.09); blip(990, 0.05, 0.12, 0.035); },
+      close: () => blip(620, 0, 0.1, 0.04, 440),
+      tick: () => blip(1400, 0, 0.04, 0.025),
+      city: () => { blip(523, 0, 0.12, 0.04); blip(784, 0.08, 0.16, 0.04); },
+    };
+    return {
+      get on() { return on; },
+      toggle() { on = !on; localStorage.setItem('sound', on ? 'on' : 'off'); if (on) this.play('tick'); return on; },
+      play(/** @type {keyof typeof cues} */ cue) {
+        if (!on) return;
+        ctx ??= new AudioContext();
+        if (ctx.state === 'suspended') ctx.resume();
+        cues[cue]();
+      },
+    };
+  })();
+
+  // ---------- Data ----------
+
+  /** @type {RegionMeta[]} */
+  const regions = await fetch('data/regions.json', { cache: 'no-cache' }).then((r) => r.json());
+  /** @type {Map<string, Promise<Region>>} */
+  const regionCache = new Map();
+  const loadRegion = (/** @type {string} */ id) => {
+    if (!regionCache.has(id)) regionCache.set(id, fetch(`data/${id}.json`, { cache: 'no-cache' }).then((r) => r.json()));
+    return /** @type {Promise<Region>} */ (regionCache.get(id));
+  };
+
+  /** Google encoded polyline (precision 5) → [lng, lat][] */
+  function decode(/** @type {string} */ str) {
+    /** @type {[number, number][]} */
+    const out = [];
+    let i = 0, lat = 0, lng = 0;
+    while (i < str.length) {
+      for (const axis of [0, 1]) {
+        let shift = 0, result = 0, b;
+        do {
+          b = str.charCodeAt(i++) - 63;
+          result |= (b & 0x1f) << shift;
+          shift += 5;
+        } while (b >= 0x20);
+        const d = result & 1 ? ~(result >> 1) : result >> 1;
+        if (axis === 0) lat += d; else lng += d;
+      }
+      out.push([lng / 1e5, lat / 1e5]);
+    }
+    return out;
+  }
+
+  /** Everything derived from a loaded region */
+  function index(/** @type {Region} */ region) {
+    /** @type {number[][]} stop → services passing it */
+    const stopServices = region.stops.map(() => []);
+    region.services.forEach((svc, i) => {
+      const seen = new Set(svc.patterns.flatMap((p) => p.stops));
+      for (const s of seen) stopServices[s].push(i);
+    });
+    const lines = region.services.map((svc) => svc.patterns.map((p) => decode(p.shape)));
+    // Hash keys: number alone unless two operators share it
+    const counts = /** @type {Map<string, number>} */ (new Map());
+    for (const s of region.services) counts.set(s.no, (counts.get(s.no) ?? 0) + 1);
+    const keys = region.services.map((s) => ((counts.get(s.no) ?? 0) > 1 ? `${s.no}~${s.op}` : s.no));
+    // Stop links use the stop code when it's unique (survives data rebuilds), else the index
+    const codeCount = new Map();
+    for (const st of region.stops) if (st[3]) codeCount.set(st[3], (codeCount.get(st[3]) ?? 0) + 1);
+    const stopKeys = region.stops.map((st, i) => (st[3] && codeCount.get(st[3]) === 1 ? st[3] : String(i)));
+    return { region, stopServices, lines, keys, stopKeys };
+  }
+
+  /** @type {ReturnType<typeof index> | null} */
+  let data = null;
+  /** @type {View} */
+  let view = { kind: 'home' };
+
+  const colorOf = (/** @type {Service} */ svc) => svc.color ?? /** @type {Region} */ (data?.region).operators[svc.op].color;
+  const badge = (/** @type {Service} */ svc, size = '') => `<span class="badge ${size}" style="--c:${colorOf(svc)}">${escapeHtml(svc.no)}</span>`;
+  const stopCode = (/** @type {Stop} */ s) => (s[3] ? `<span class="code">${escapeHtml(s[3])}</span> ` : '');
+  const clock = (/** @type {string | null} */ t) => (t ? `${t.slice(0, 2)}:${t.slice(2)}` : '—');
+  const toMin = (/** @type {string} */ t) => +t.slice(0, 2) * 60 + +t.slice(2);
+
+  /** Weekday timetable only: "Starts 06:00" / "Ended for today", or '' while running (and on weekends) */
+  function runningNote(/** @type {Pattern} */ p) {
+    const d = new Date();
+    if (!p.first || !p.last || d.getDay() === 0 || d.getDay() === 6) return '';
+    const now = d.getHours() * 60 + d.getMinutes(), first = toMin(p.first);
+    let last = toMin(p.last);
+    if (last < first) last += 1440; // runs past midnight
+    if (now < first && now + 1440 > last) return `Starts ${clock(p.first)}`;
+    if (now > last) return 'Ended for today';
+    return '';
+  }
+
+  /** Average gap between departures, in minutes */
+  function headway(/** @type {Pattern} */ p) {
+    if (!p.first || !p.last || p.trips < 2) return null;
+    let span = toMin(p.last) - toMin(p.first);
+    if (span <= 0) span += 1440;
+    return Math.round(span / (p.trips - 1));
+  }
+
+  // ---------- Map ----------
+
+  const pad = () => (isMobile()
+    ? { top: 70, bottom: innerHeight * 0.46 + 20, left: 30, right: 60 }
+    : { top: 60, bottom: 60, left: 380 + 50, right: 80 });
+
+  const map = new maplibregl.Map({
+    container: 'map',
+    style: 'https://tiles.openfreemap.org/styles/positron',
+    bounds: regions[0].bounds,
+    maxBounds: [[98.5, 0], [120.5, 8]],
+    minZoom: 5,
+    attributionControl: { compact: true },
+    pixelRatio: Math.min(devicePixelRatio, 2),
+    fadeDuration: 0,
+    renderWorldCopies: false,
+    boxZoom: false,
+    dragRotate: false,
+    pitchWithRotate: false,
+    touchPitch: false,
+  });
+  map.touchZoomRotate.disableRotation();
+
+  const RESTYLE = {
+    background: { 'background-color': '#f4f2ee' },
+    water: { 'fill-color': '#b9daf0' },
+    waterway: { 'line-color': '#b9daf0' },
+    park: { 'fill-color': '#d5ebc8', 'fill-opacity': 1 },
+    landcover_wood: { 'fill-color': '#d5ebc8', 'fill-opacity': 0.8 },
+    landuse_residential: { 'fill-color': '#efece6' },
+    building: { 'fill-color': '#e7e3db', 'fill-outline-color': '#d8d2c6' },
+    highway_minor: { 'line-color': '#ffffff' },
+    highway_major_casing: { 'line-color': '#e2ded5' },
+    highway_major_inner: { 'line-color': '#ffffff' },
+    highway_motorway_casing: { 'line-color': '#e2ded5' },
+    highway_motorway_inner: { 'line-color': '#ffffff' },
+    highway_motorway_subtle: { 'line-color': '#ffffff' },
+  };
+  const HIDE = ['highway-shield-non-us', 'highway-shield-us-interstate', 'road_shield_us'];
+
+  // Neutral slate: stands out on every operator's route colour
+  const STOP = '#4a5264';
+
+  /** Round stop marker with a little bus, drawn at 2× */
+  function stopIcon(/** @type {string} */ fill, /** @type {number} */ r) {
+    const size = (r + 2) * 2 * 2, c = document.createElement('canvas');
+    c.width = c.height = size;
+    const g = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
+    const m = size / 2, k = r * 2 / 13;
+    g.fillStyle = '#ffffff';
+    g.beginPath(); g.arc(m, m, (r + 1.5) * 2, 0, Math.PI * 2); g.fill();
+    g.fillStyle = fill;
+    g.beginPath(); g.arc(m, m, r * 2 - 1, 0, Math.PI * 2); g.fill();
+    // bus body, windscreen, wheels
+    g.fillStyle = '#ffffff';
+    g.beginPath(); g.roundRect(m - 5.5 * k, m - 6 * k, 11 * k, 10.5 * k, 2 * k); g.fill();
+    g.fillStyle = fill;
+    g.fillRect(m - 4 * k, m - 4 * k, 8 * k, 4 * k);
+    g.fillStyle = '#ffffff';
+    g.fillRect(m - 4.5 * k, m + 4 * k, 2.5 * k, 2 * k);
+    g.fillRect(m + 2 * k, m + 4 * k, 2.5 * k, 2 * k);
+    return g.getImageData(0, 0, size, size);
+  }
+
+  /** Chunky direction arrow, SDF so it takes each line's colour */
+  const arrowIcon = (() => {
+    const w = 40, h = 32, c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const g = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
+    g.fillStyle = '#000';
+    g.beginPath();
+    g.moveTo(4, 12); g.lineTo(22, 12); g.lineTo(22, 5); g.lineTo(36, 16);
+    g.lineTo(22, 27); g.lineTo(22, 20); g.lineTo(4, 20);
+    g.closePath(); g.fill();
+    return g.getImageData(0, 0, w, h);
+  })();
+
+  /** @param {GeoJSON.Feature[]} features */
+  const fc = (features) => /** @type {GeoJSON.FeatureCollection} */ ({ type: 'FeatureCollection', features });
+  const source = (/** @type {string} */ id) => /** @type {import('maplibre-gl').GeoJSONSource} */ (map.getSource(id));
+
+  const mapReady = new Promise((resolve) => map.on('load', resolve));
+
+  map.on('load', () => {
+    for (const [layer, paint] of Object.entries(RESTYLE)) {
+      if (!map.getLayer(layer)) continue;
+      for (const [prop, value] of Object.entries(paint)) map.setPaintProperty(layer, prop, value);
+    }
+    for (const layer of HIDE) if (map.getLayer(layer)) map.setLayoutProperty(layer, 'visibility', 'none');
+    map.addLayer({
+      id: 'poi-labels', type: 'symbol', source: 'openmaptiles', 'source-layer': 'poi', minzoom: 16,
+      filter: ['all', ['has', 'name'], ['<=', ['coalesce', ['get', 'rank'], 99], 25]],
+      layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'], 'text-size': 11, 'text-max-width': 8, 'text-padding': 4 },
+      paint: { 'text-color': '#8b8680', 'text-halo-color': '#f4f2ee', 'text-halo-width': 1.4 },
+    });
+
+    map.addImage('route-arrow', arrowIcon, { sdf: true, pixelRatio: 2 });
+    const round = /** @type {const} */ ({ 'line-cap': 'round', 'line-join': 'round' });
+
+    // Service areas: every city's catchment (500 m walk round its stops). Current city tinted, others a quiet outline you can click
+    map.addSource('areas', { type: 'geojson', data: fc(regions.map((r) => ({ type: 'Feature', properties: { id: r.id, name: r.name },
+      geometry: { type: 'MultiPolygon', coordinates: r.area } }))) });
+    const current = ['==', ['get', 'id'], ''];
+    map.addLayer({ id: 'area-fill', type: 'fill', source: 'areas',
+      paint: { 'fill-color': STOP, 'fill-opacity': ['case', current, 0.035, 0] } });
+    map.addLayer({ id: 'area-line', type: 'line', source: 'areas', layout: round,
+      paint: { 'line-color': STOP, 'line-dasharray': [2, 2],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 6, 1, 14, 2],
+        'line-opacity': ['interpolate', ['linear'], ['zoom'], 8, ['case', current, 0.55, 0.3], 15, ['case', current, 0.25, 0.3]] } });
+    map.addLayer({ id: 'area-label', type: 'symbol', source: 'areas', maxzoom: 11, filter: ['!', current],
+      layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Bold'], 'text-size': 12 },
+      paint: { 'text-color': STOP, 'text-opacity': 0.7, 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 } });
+
+    // Stops by zoom (busrouter's principle): < 14 tiny dots · 14+ icons · 15+ code · 16+ code + name.
+    // No special terminus icons: Malaysian route ends aren't SG-style interchanges.
+    // MY riders know stops by name (codes aren't on most poles, unlike SG): name leads, code is a small grey hint
+    const hasCode = ['!=', ['coalesce', ['get', 'code'], ''], ''];
+    const shortLabel = ['case', hasCode, ['get', 'code'], ['get', 'name']];
+    const nameAndCode = ['case', hasCode,
+      ['format', ['get', 'name'], { 'text-color': '#2b2f38' }, '\n', {}, ['get', 'code'], { 'font-scale': 0.85, 'text-font': ['literal', ['Noto Sans Regular']], 'text-color': '#7a8190' }],
+      ['format', ['get', 'name'], { 'text-color': '#2b2f38' }]];
+    map.addImage('stop-icon', stopIcon(STOP, 13), { pixelRatio: 2 });
+    map.addSource('stops', { type: 'geojson', tolerance: 10, buffer: 0, data: fc([]) });
+    map.addLayer({ id: 'stops', type: 'circle', source: 'stops', maxzoom: 14,
+      paint: {
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 0.75, 14, 4],
+        'circle-color': STOP,
+        'circle-stroke-color': '#ffffff',
+        'circle-stroke-width': 1,
+        'circle-stroke-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0, 13.5, 1],
+      } });
+    map.addLayer({ id: 'stops-icon', type: 'symbol', source: 'stops', minzoom: 14,
+      layout: {
+        'icon-image': 'stop-icon',
+        // ≈ busrouter's 14 / 17 / 20 px (its 34px icon at 0.4 / 0.5 / 0.6)
+        'icon-size': ['step', ['zoom'], 0.46, 15, 0.56, 16, 0.66],
+        'icon-allow-overlap': true,
+        'icon-padding': 0.5,
+        'text-field': ['step', ['zoom'], '', 15, shortLabel, 16, nameAndCode],
+        'text-font': ['Noto Sans Bold'],
+        'text-size': ['step', ['zoom'], 11, 16, 12.5],
+        'text-anchor': 'left', 'text-justify': 'left', 'text-offset': [0.8, 0],
+        'text-max-width': 12, 'text-line-height': 1.1, 'text-padding': 0.5, 'text-optional': true,
+      },
+      paint: { 'text-color': STOP, 'text-halo-color': '#ffffff', 'text-halo-width': 1.2 } });
+
+    // Selection: a service's direction, or all services passing a stop
+    map.addSource('sel', { type: 'geojson', lineMetrics: true, data: fc([]) });
+    // Thin when zoomed out, wider + shifted to the left lane when zoomed in (MY drives on the left)
+    const thin = ['boolean', ['get', 'thin'], false];
+    const routeWidth = (/** @type {number} */ extra) => ['interpolate', ['linear'], ['zoom'],
+      10, ['+', ['case', thin, 1.5, 2.5], extra],
+      12, ['+', ['case', thin, 2, 3], extra],
+      16, ['+', ['case', thin, 3.5, 6], extra],
+      20, ['+', ['case', thin, 6, 11], extra]];
+    const offset = ['interpolate', ['linear'], ['zoom'], 12, 0, 16, -3, 20, -8];
+    map.addLayer({ id: 'sel-casing', type: 'line', source: 'sel', layout: round,
+      paint: { 'line-color': '#ffffff', 'line-width': routeWidth(3), 'line-offset': offset,
+        'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, ['case', ['boolean', ['get', 'dim'], false], 0.4, 0.9], 16, ['case', ['boolean', ['get', 'dim'], false], 0.3, 0.6]] } });
+    map.addLayer({ id: 'sel-line', type: 'line', source: 'sel', layout: round,
+      paint: { 'line-color': ['get', 'color'], 'line-gradient': gradient(STOP), 'line-width': routeWidth(0), 'line-offset': offset,
+        'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, ['case', ['boolean', ['get', 'dim'], false], 0.25, 0.85], 16, ['case', ['boolean', ['get', 'dim'], false], 0.2, 0.55]] } });
+    // Direction arrows beside the line, on the travel (left) side — busrouter-style
+    map.addLayer({ id: 'sel-arrows', type: 'symbol', source: 'sel', minzoom: 12,
+      filter: ['!', ['boolean', ['get', 'dim'], false]],
+      layout: {
+        'symbol-placement': 'line', 'symbol-spacing': 110,
+        'icon-image': 'route-arrow', 'icon-size': ['interpolate', ['linear'], ['zoom'], 12, 0.5, 16, 0.7, 20, 1],
+        'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-rotation-alignment': 'map',
+        'icon-offset': ['interpolate', ['linear'], ['zoom'], 12, ['literal', [0, -14]], 16, ['literal', [0, -18]], 20, ['literal', [0, -22]]],
+      },
+      paint: { 'icon-color': ['get', 'color'], 'icon-halo-color': '#ffffff', 'icon-halo-width': 1.5 } });
+
+    // Passing routes: bus number written along each line
+    map.addLayer({ id: 'sel-labels', type: 'symbol', source: 'sel',
+      filter: ['all', ['has', 'no'], ['!', ['boolean', ['get', 'dim'], false]]],
+      layout: {
+        'symbol-placement': 'line', 'symbol-spacing': 260, 'text-field': ['get', 'no'],
+        'text-font': ['Noto Sans Bold'], 'text-size': 12, 'text-padding': 4, 'text-keep-upright': true,
+      },
+      paint: { 'text-color': ['get', 'color'], 'text-halo-color': '#ffffff', 'text-halo-width': 2 } });
+
+    // Stops sit on top of route lines (busrouter does the same)
+    for (const id of ['stops', 'stops-icon']) map.moveLayer(id);
+
+    map.addSource('sel-stops', { type: 'geojson', data: fc([]) });
+    map.addLayer({ id: 'sel-stops-dot', type: 'circle', source: 'sel-stops',
+      paint: {
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, ['case', ['get', 'end'], 4, 1.8], 15, ['case', ['get', 'end'], 8, 4.5], 18, ['case', ['get', 'end'], 11, 8]],
+        'circle-color': '#ffffff', 'circle-stroke-color': ['get', 'color'],
+        'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 10, ['case', ['get', 'end'], 2.5, 1.2], 15, ['case', ['get', 'end'], 4, 2.4]],
+      } });
+    map.addLayer({ id: 'sel-stops-label', type: 'symbol', source: 'sel-stops',
+      filter: ['any', ['get', 'end'], ['>=', ['zoom'], 14]],
+      layout: {
+        'text-field': ['step', ['zoom'], ['get', 'name'], 15,
+          ['case', hasCode, ['format', ['get', 'name'], {}, '\n', {}, ['get', 'code'], { 'font-scale': 0.85, 'text-font': ['literal', ['Noto Sans Regular']], 'text-color': '#7a8190' }], ['get', 'name']]],
+        'text-font': ['Noto Sans Bold'], 'text-size': ['case', ['get', 'end'], 13, 11.5], 'text-line-height': 1.15, 'text-letter-spacing': 0.01,
+        // Beside the dot, left-aligned, flipping sides to dodge the line/other labels
+        'text-variable-anchor': ['left', 'right'], 'text-radial-offset': 0.9, 'text-justify': 'auto',
+        'text-max-width': 14, 'text-optional': true, 'text-padding': 3,
+        'symbol-sort-key': ['case', ['get', 'end'], 0, 1],
+      },
+      paint: { 'text-color': '#2b2f38', 'text-halo-color': 'rgba(255,255,255,0.95)', 'text-halo-width': 2, 'text-halo-blur': 0.5 } });
+
+    // Selected stop
+    map.addSource('pin', { type: 'geojson', data: fc([]) });
+    // Same bus icon, just bigger, on a soft ring — busrouter-style, no animation
+    map.addLayer({ id: 'pin-halo', type: 'circle', source: 'pin',
+      paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 11, 16, 15], 'circle-color': '#ffffff', 'circle-opacity': 0.6,
+        'circle-stroke-color': STOP, 'circle-stroke-width': 4, 'circle-stroke-opacity': 0.35 } });
+    map.addLayer({ id: 'pin-icon', type: 'symbol', source: 'pin',
+      layout: { 'icon-image': 'stop-icon', 'icon-size': ['interpolate', ['linear'], ['zoom'], 10, 0.7, 16, 0.9], 'icon-allow-overlap': true, 'icon-ignore-placement': true,
+        // Own label, pushed past the ring (the regular stop layer skips this stop)
+        'text-field': ['step', ['zoom'], '', 15, shortLabel, 16, nameAndCode], 'text-font': ['Noto Sans Bold'],
+        'text-size': ['step', ['zoom'], 11, 16, 12.5], 'text-anchor': 'left', 'text-justify': 'left', 'text-offset': [1.5, 0],
+        'text-max-width': 12, 'text-line-height': 1.1, 'text-allow-overlap': true },
+      paint: { 'text-color': STOP, 'text-halo-color': '#ffffff', 'text-halo-width': 1.2 } });
+
+    document.querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show');
+  });
+
+  /** @param {[number, number][]} coords @param {Record<string, unknown>} props */
+  const line = (coords, props) => /** @type {GeoJSON.Feature} */ ({ type: 'Feature', properties: props, geometry: { type: 'LineString', coordinates: coords } });
+  /** @param {number} i @param {Record<string, unknown>} props */
+  const point = (i, props = {}) => {
+    const s = /** @type {Region} */ (data?.region).stops[i];
+    return /** @type {GeoJSON.Feature} */ ({ type: 'Feature', properties: { i, name: s[2], code: s[3], ...props }, geometry: { type: 'Point', coordinates: [s[0], s[1]] } });
+  };
+
+  // busrouter-style gradient along the line, kept in the route's own hue: colour → lighter tint → colour
+  // (line-gradient can't read feature props, so it's set per selection)
+  function gradient(/** @type {string} */ hex) {
+    const n = parseInt(hex.slice(1), 16);
+    const [r, g, b] = [n >> 16, (n >> 8) & 255, n & 255].map((v) => v / 255);
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
+    const s = d ? d / (1 - Math.abs(2 * l - 1)) : 0;
+    const h = !d ? 0 : max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    const tint = `hsl(${Math.round((h * 60 + 360) % 360)} ${Math.round(s * 100)}% ${Math.round(Math.min(l + 0.22, 0.75) * 100)}%)`;
+    return ['interpolate', ['linear'], ['line-progress'], 0, hex, 0.5, tint, 1, hex];
+  }
+  const tint = (/** @type {string} */ hex) => { if (map.getLayer('sel-line')) map.setPaintProperty('sel-line', 'line-gradient', gradient(hex)); };
+
+  function drawRegion() {
+    if (!data) return;
+    source('stops').setData(fc(data.region.stops.map((_, i) => point(i))));
+    // Mark the current city's area (the expressions compare against its id)
+    const current = ['==', ['get', 'id'], data.region.id];
+    map.setPaintProperty('area-fill', 'fill-opacity', ['case', current, 0.035, 0]);
+    map.setPaintProperty('area-line', 'line-opacity', ['interpolate', ['linear'], ['zoom'], 8, ['case', current, 0.55, 0.3], 15, ['case', current, 0.25, 0.3]]);
+    map.setFilter('area-label', ['!', current]);
+  }
+
+  /** The colour most buses at a stop share — all their lines use it, so the map stays calm */
+  function stopColor(/** @type {number} */ stop) {
+    if (!data) return STOP;
+    const counts = /** @type {Map<string, number>} */ (new Map());
+    for (const s of data.stopServices[stop]) { const c = colorOf(data.region.services[s]); counts.set(c, (counts.get(c) ?? 0) + 1); }
+    return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? STOP;
+  }
+
+  /** All buses through a stop in one colour; `focus` (a service) keeps its own colour, the rest fade */
+  function stopLines(/** @type {number} */ stop, focus = -1) {
+    if (!data) return [];
+    const { region, lines, stopServices } = data;
+    const color = stopColor(stop);
+    tint(focus >= 0 ? colorOf(region.services[focus]) : color);
+    return stopServices[stop]
+      .flatMap((s) => lines[s].map((coords) => line(coords, { svc: s, no: region.services[s].no, thin: true, color: s === focus ? colorOf(region.services[s]) : color, dim: focus >= 0 && s !== focus })))
+      .sort((a, b) => Number(b.properties?.dim) - Number(a.properties?.dim));
+  }
+
+  /** Selected stop: drawn by the pin layers, hidden from the regular stop layers */
+  function setPin(/** @type {number} */ stop) {
+    source('pin').setData(fc(stop >= 0 ? [point(stop)] : []));
+    const others = stop >= 0 ? ['!=', ['get', 'i'], stop] : null;
+    for (const id of ['stops', 'stops-icon']) map.setFilter(id, others);
+  }
+
+  function drawSelection() {
+    if (!data) return;
+    hovered = -1;
+    const { region, lines, stopServices } = data;
+    /** @type {GeoJSON.Feature[]} */ let sel = [];
+    /** @type {GeoJSON.Feature[]} */ let selStops = [];
+
+    if (view.kind === 'service') {
+      const svc = region.services[view.svc];
+      const color = colorOf(svc);
+      const dir = view.dir;
+      tint(color);
+      sel = lines[view.svc].map((coords, d) => line(coords, { color, dim: d !== dir }))
+        .sort((a, b) => Number(b.properties?.dim) - Number(a.properties?.dim));
+      const p = svc.patterns[dir];
+      selStops = p.stops.map((s, k) => point(s, { color, end: k === 0 || k === p.stops.length - 1 }));
+    } else if (view.kind === 'stop') {
+      const passing = stopServices[view.stop];
+      sel = stopLines(view.stop);
+    }
+    source('sel').setData(fc(sel));
+    source('sel-stops').setData(fc(selStops));
+    setPin(view.kind === 'stop' ? view.stop : -1);
+    const stopsVis = view.kind === 'service' ? 'none' : 'visible';
+    for (const id of ['stops', 'stops-icon']) map.setLayoutProperty(id, 'visibility', stopsVis);
+  }
+
+  /** @param {[number, number][]} coords */
+  function fitCoords(coords, maxZoom = 16) {
+    if (!coords.length) return;
+    const b = new maplibregl.LngLatBounds(coords[0], coords[0]);
+    for (const c of coords) b.extend(c);
+    map.fitBounds(b, { padding: pad(), maxZoom, duration: 700 });
+  }
+
+  // ---------- Panel views ----------
+
+  function renderHome() {
+    if (!data) return;
+    const { region, stopServices } = data;
+    const term = q.value.trim().toLowerCase();
+    // Legend only when riders would see different brands
+    const brands = [...new Map(region.operators.map((o) => [o.name, o])).values()];
+    const ops = brands.length > 1
+      ? brands.map((o) => `<span class="op-key"><i style="background:${o.color}"></i>${escapeHtml(o.name)}</span>`).join('')
+      : '';
+
+    const services = region.services
+      .map((svc, i) => ({ svc, i }))
+      .filter(({ svc }) => !term || svc.no.toLowerCase().includes(term) || svc.name.toLowerCase().includes(term))
+      .sort((a, b) => (term ? Number(!a.svc.no.toLowerCase().startsWith(term)) - Number(!b.svc.no.toLowerCase().startsWith(term)) : 0));
+
+    const stops = term.length < 2 ? [] : region.stops
+      .map((s, i) => ({ s, i }))
+      .filter(({ s }) => s[2].toLowerCase().includes(term) || s[3].toLowerCase().startsWith(term))
+      .slice(0, 60);
+
+    const svcRows = services.map(({ svc, i }) => `
+      <button class="row" data-svc="${i}">
+        ${badge(svc)}
+        <div class="main"><div class="t wrap">${escapeHtml(svc.name)}</div></div>
+      </button>`).join('');
+    const stopRows = stops.map(({ s, i }) => `
+      <button class="row" data-stop="${i}">
+        <span class="stop-icon"></span>
+        <div class="main"><div class="t">${escapeHtml(s[2])}</div>
+        <div class="s">${stopCode(s)}${stopServices[i].length} bus${stopServices[i].length === 1 ? '' : 'es'}</div></div>
+      </button>`).join('');
+
+    body.innerHTML = (stops.length ? `<h3 class="section-title">Stops</h3>${stopRows}` : '')
+      + (services.length ? `<h3 class="section-title">${term ? 'Buses' : `${services.length} buses`} ${ops}</h3>${svcRows}` : '')
+      + (!services.length && !stops.length ? `<div class="empty">Nothing matches “${escapeHtml(q.value)}”</div>` : '');
+  }
+
+  function renderService(/** @type {number} */ svcIdx, /** @type {number} */ dir) {
+    if (!data) return;
+    const { region, stopServices } = data;
+    const svc = region.services[svcIdx];
+    const p = svc.patterns[dir];
+    const color = colorOf(svc);
+    const hw = headway(p);
+    const dirs = svc.patterns.length > 1
+      ? `<div class="dirs">${svc.patterns.map((pt, d) => `
+          <button class="${d === dir ? 'active' : ''}" data-dir="${d}"><span>${pt.loop ? 'Loop via' : 'To'} <b>${escapeHtml(pt.to)}</b></span></button>`).join('')}</div>`
+      : `<div class="note">${p.loop ? 'Loop via' : 'To'} <b>${escapeHtml(p.to)}</b></div>`;
+
+    const rows = p.stops.map((s, k) => {
+      const st = region.stops[s];
+      const others = stopServices[s].filter((o) => o !== svcIdx);
+      const mins = p.mins ? p.mins[k] : null;
+      return `<li class="${k === 0 || k === p.stops.length - 1 ? 'end' : ''}">
+        <button class="row" data-stop="${s}">
+          <div class="main"><div class="t">${escapeHtml(st[2])}</div>
+            ${st[3] ? `<div class="s">${stopCode(st)}</div>` : ''}
+            ${others.length ? `<div class="others">${others.slice(0, 8).map((o) => badge(region.services[o], 'sm')).join('')}${others.length > 8 ? `<span class="s">+${others.length - 8}</span>` : ''}</div>` : ''}
+          </div>
+          ${mins !== null && k > 0 ? `<span class="mins">${mins} min</span>` : ''}
+        </button></li>`;
+    }).join('');
+
+    body.innerHTML = `
+      <div class="detail-head">
+        <button class="close-x" data-back aria-label="Close">✕</button>
+        <div class="title-row">${badge(svc, 'lg')}<div><h2>${escapeHtml(svc.name)}</h2><div class="op">${escapeHtml(region.operators[svc.op].name)}</div></div></div>
+        ${dirs}
+        <div class="facts">
+          <div class="fact"><b>${clock(p.first)}</b><span>First bus</span></div>
+          <div class="fact"><b>${clock(p.last)}</b><span>Last bus</span></div>
+          <div class="fact"><b>${hw ? `~${hw} min` : '—'}</b><span>Every</span></div>
+        </div>
+        ${runningNote(p) ? `<div class="note"><span class="off${runningNote(p).startsWith('Ended') ? ' ended' : ''}">${runningNote(p)}</span></div>` : ''}
+        <div class="note">Weekday timetable · ${p.trips} trips · ${p.stops.length} stops${p.mins ? ` · ~${p.mins[p.mins.length - 1]} min end to end` : ''}</div>
+      </div>
+      <ol class="timeline" style="--c:${color}">${rows}</ol>`;
+  }
+
+  function renderStop(/** @type {number} */ stopIdx) {
+    if (!data) return;
+    const { region, stopServices } = data;
+    const st = region.stops[stopIdx];
+    const passing = stopServices[stopIdx];
+    const rows = passing.map((svcIdx) => {
+      const svc = region.services[svcIdx];
+      // Directions that serve this stop (not as their last stop)
+      const dirs = svc.patterns.map((p, d) => ({ p, d, k: p.stops.indexOf(stopIdx) })).filter(({ p, k }) => k >= 0 && k < p.stops.length - 1);
+      const main = dirs[0] ?? { p: svc.patterns[0], d: 0, k: 0 };
+      const toText = dirs.length ? dirs.map(({ p }) => `${p.loop ? 'Loop via' : 'To'} ${escapeHtml(p.to)}`).join(' · ') : 'Ends here';
+      return `<button class="row" data-svc="${svcIdx}" data-dir="${main.d}">
+          ${badge(svc)}
+          <div class="main"><div class="t">${toText}</div>
+          <div class="s">${runningNote(main.p) ? `<span class="off${runningNote(main.p).startsWith('Ended') ? ' ended' : ''}">${runningNote(main.p)}</span> · ` : ''}${clock(main.p.first)}–${clock(main.p.last)}${headway(main.p) ? ` · every ~${headway(main.p)} min` : ''}</div></div>
+        </button>`;
+    }).join('');
+
+    body.innerHTML = `
+      <div class="detail-head">
+        <button class="close-x" data-back aria-label="Close">✕</button>
+        <div class="title-row"><span class="stop-icon" style="width:34px;height:34px"></span>
+          <div><h2>${escapeHtml(st[2])}</h2><div class="op">${st[3] ? `Stop ${escapeHtml(st[3])} · ` : ''}${passing.length} bus${passing.length === 1 ? '' : 'es'}</div></div></div>
+        ${passing.length ? '<button class="chip-btn" data-passing>Show all passing routes</button>' : ''}
+      </div>
+      <h3 class="section-title">Buses here</h3>
+      ${rows || '<div class="empty">No buses</div>'}`;
+  }
+
+  function render() {
+    clearBtn.hidden = !q.value;
+    if (view.kind === 'service') renderService(view.svc, view.dir);
+    else if (view.kind === 'stop') renderStop(view.stop);
+    else renderHome();
+    body.scrollTop = 0;
+  }
+
+  // ---------- Navigation (hash = shareable state) ----------
+
+  let regionId = regions[0].id;
+
+  function writeHash() {
+    if (!data) return;
+    const tail = view.kind === 'service' ? `/bus/${encodeURIComponent(data.keys[view.svc])}${view.dir ? '/2' : ''}`
+      : view.kind === 'stop' ? `/stop/${encodeURIComponent(data.stopKeys[view.stop])}` : '';
+    history.replaceState(null, '', `#/${regionId}${tail}`);
+  }
+
+  /** @param {View} next @param {{ fly?: boolean }} opts */
+  let peeked = -1;
+  function peekStop(/** @type {number} */ stop, /** @type {HTMLElement} */ row) {
+    if (!data) return;
+    peeked = stop;
+    for (const r of body.querySelectorAll('.timeline .row')) r.classList.toggle('hl', r === row);
+    setPin(stop);
+    const s = data.region.stops[stop];
+    map.flyTo({ center: [s[0], s[1]], zoom: Math.max(map.getZoom(), 16.5), padding: pad(), duration: 600 });
+  }
+
+  let fromStop = -1; // stop a bus was opened from, so ✕ returns there
+  function go(next, { fly = true } = {}) {
+    peeked = -1;
+    if (next.kind === 'service') fromStop = view.kind === 'stop' ? view.stop : view.kind === 'service' ? fromStop : -1;
+    view = next;
+    render();
+    drawSelection();
+    writeHash();
+    if (!data || !fly) return;
+    if (view.kind === 'service') {
+      fitCoords(data.lines[view.svc][view.dir]);
+      if (isMobile()) setSheet('');
+    } else if (view.kind === 'stop') {
+      const s = data.region.stops[view.stop];
+      map.flyTo({ center: [s[0], s[1]], zoom: Math.max(map.getZoom(), 15.5), padding: pad(), duration: 700 });
+      if (isMobile()) setSheet('');
+    }
+  }
+
+  async function setRegion(/** @type {string} */ id, /** @type {View} */ next = { kind: 'home' }, fit = true) {
+    regionId = id;
+    regionBtn.textContent = regions.find((r) => r.id === id)?.name ?? '';
+    for (const b of cityMenu.querySelectorAll('[data-city]')) b.setAttribute('aria-selected', String((/** @type {HTMLElement} */ (b)).dataset.city === id));
+    loading.hidden = false;
+    const region = await loadRegion(id);
+    await mapReady;
+    loading.hidden = true;
+    if (regionId !== id) return; // switched again while loading
+    data = index(region);
+    document.documentElement.style.setProperty('--accent', region.operators[0].color);
+    drawRegion();
+    if (fit && next.kind === 'home') map.fitBounds(region.bounds, { padding: pad(), duration: 0 });
+    go(next, { fly: next.kind !== 'home' });
+  }
+
+  function fromHash() {
+    const [, id, kind, key, dir] = location.hash.split('/');
+    const meta = regions.find((r) => r.id === id) ?? regions[0];
+    return { id: meta.id, kind, key: key ? decodeURIComponent(key) : '', dir: dir === '2' ? 1 : 0 };
+  }
+
+  /** Resolve a hash key once the region is loaded */
+  async function openFromHash() {
+    const h = fromHash();
+    const region = await loadRegion(h.id);
+    const { keys, stopKeys } = index(region);
+    const svc = keys.indexOf(h.key);
+    const stop = stopKeys.indexOf(h.key);
+    /** @type {View} */
+    const next = h.kind === 'bus' && svc >= 0 ? { kind: 'service', svc, dir: Math.min(h.dir, region.services[svc].patterns.length - 1) }
+      : h.kind === 'stop' && stop >= 0 ? { kind: 'stop', stop }
+      : { kind: 'home' };
+    await setRegion(h.id, next);
+  }
+
+  // ---------- Events ----------
+
+  // City picker
+  cityMenu.innerHTML = regions.map((r) => `<li><button role="option" data-city="${r.id}" aria-selected="false">
+      <b>${escapeHtml(r.name)}</b><span class="tick">✓</span>
+      <small>${r.services} buses · ${escapeHtml(r.operators.join(', '))}</small></button></li>`).join('');
+  function toggleCities(/** @type {boolean} */ open) {
+    cityMenu.hidden = !open;
+    regionBtn.setAttribute('aria-expanded', String(open));
+    if (open) (/** @type {HTMLElement | null} */ (cityMenu.querySelector('[aria-selected="true"]')) ?? cityMenu.querySelector('button'))?.focus();
+  }
+  regionBtn.addEventListener('click', () => toggleCities(cityMenu.hidden));
+  cityMenu.addEventListener('click', (e) => {
+    const b = /** @type {HTMLElement | null} */ ((/** @type {HTMLElement} */ (e.target)).closest('[data-city]'));
+    if (!b) return;
+    toggleCities(false);
+    q.value = '';
+    if (b.dataset.city !== regionId) { sound.play('city'); setRegion(/** @type {string} */ (b.dataset.city)); }
+  });
+  addEventListener('pointerdown', (e) => { if (!cityMenu.hidden && !(/** @type {HTMLElement} */ (e.target)).closest('.city')) toggleCities(false); });
+  addEventListener('keydown', (e) => {
+    if (cityMenu.hidden) return;
+    if (e.key === 'Escape') { toggleCities(false); regionBtn.focus(); }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const items = [...cityMenu.querySelectorAll('button')];
+      const i = items.indexOf(/** @type {HTMLButtonElement} */ (document.activeElement));
+      items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus();
+    }
+  });
+
+  q.addEventListener('input', () => { if (view.kind !== 'home') go({ kind: 'home' }, { fly: false }); else render(); });
+  q.addEventListener('focus', () => { if (isMobile()) setSheet('expanded'); });
+  // Enter opens the top result · Esc clears, then leaves the box
+  q.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') (/** @type {HTMLElement | null} */ (body.querySelector('.row')))?.click();
+    if (e.key === 'Escape') { if (q.value) { q.value = ''; render(); } else q.blur(); }
+  });
+  // "/" jumps to search · Esc closes the open bus/stop (like its ✕)
+  addEventListener('keydown', (e) => {
+    const typing = /** @type {HTMLElement} */ (e.target).closest('input, textarea');
+    if (typing || !cityMenu.hidden || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === '/') { e.preventDefault(); q.focus(); }
+    if (e.key === 'Escape' && view.kind !== 'home') (/** @type {HTMLElement | null} */ (body.querySelector('[data-back]')))?.click();
+  });
+  clearBtn.addEventListener('click', () => { q.value = ''; render(); q.focus(); });
+
+  body.addEventListener('click', (e) => {
+    const el = /** @type {HTMLElement | null} */ ((/** @type {HTMLElement} */ (e.target)).closest('[data-svc],[data-stop],[data-dir],[data-back],[data-passing]'));
+    if (!el || !data) return;
+    sound.play(el.dataset.back !== undefined ? 'close' : el.dataset.svc ? 'bus' : el.dataset.stop ? 'stop' : 'tick');
+    if (el.dataset.back !== undefined) {
+      return view.kind === 'service' && fromStop >= 0 ? go({ kind: 'stop', stop: fromStop }) : go({ kind: 'home' }, { fly: false });
+    }
+    if (el.dataset.passing !== undefined && view.kind === 'stop') {
+      return fitCoords(data.stopServices[view.stop].flatMap((svc) => data.lines[svc].flat()), 15);
+    }
+    if (el.dataset.svc) return go({ kind: 'service', svc: +el.dataset.svc, dir: +(el.dataset.dir ?? 0) });
+    if (el.dataset.stop) {
+      const stop = +el.dataset.stop;
+      // In a route's stop list (busrouter-style): 1st tap zooms to the stop, 2nd opens it
+      if (view.kind === 'service' && peeked !== stop) return peekStop(stop, el);
+      return go({ kind: 'stop', stop });
+    }
+    if (el.dataset.dir && view.kind === 'service') return go({ ...view, dir: +el.dataset.dir });
+  });
+
+  // Hover a bus: preview its line (home), or single it out among the buses at a stop
+  let hovered = -1;
+  body.addEventListener('pointerover', (e) => {
+    if (!data || view.kind === 'service' || e.pointerType === 'touch') return;
+    const el = /** @type {HTMLElement | null} */ ((/** @type {HTMLElement} */ (e.target)).closest('[data-svc]'));
+    const svcIdx = el ? +(/** @type {string} */ (el.dataset.svc)) : -1;
+    focusService(svcIdx);
+  });
+
+  function focusService(/** @type {number} */ svcIdx) {
+    if (!data || svcIdx === hovered) return;
+    hovered = svcIdx;
+    if (view.kind === 'home') {
+      const color = svcIdx >= 0 ? colorOf(data.region.services[svcIdx]) : '';
+      if (color) tint(color);
+      source('sel').setData(fc(svcIdx >= 0 ? data.lines[svcIdx].map((coords) => line(coords, { color })) : []));
+    } else if (view.kind === 'stop') {
+      source('sel').setData(fc(stopLines(view.stop, svcIdx)));
+      for (const row of body.querySelectorAll('[data-svc]')) row.classList.toggle('hl', +(/** @type {HTMLElement} */ (row).dataset.svc ?? -1) === svcIdx);
+    }
+  }
+  body.addEventListener('pointerleave', () => { hovered = -1; drawSelection(); });
+
+  const pickable = ['sel-stops-dot', 'stops-icon', 'stops'];
+  map.on('click', (e) => {
+    if (!data) return;
+    const box = /** @type {[[number, number], [number, number]]} */ ([[e.point.x - 8, e.point.y - 8], [e.point.x + 8, e.point.y + 8]]);
+    const stop = map.queryRenderedFeatures(box, { layers: pickable.filter((l) => map.getLayer(l)) })[0];
+    if (stop) { sound.play('stop'); return go({ kind: 'stop', stop: stop.properties.i }); }
+    // At a stop, clicking one of its bus lines opens that bus
+    const route = view.kind === 'stop' ? map.queryRenderedFeatures(box, { layers: ['sel-line'] })[0] : undefined;
+    if (route) { sound.play('bus'); return go({ kind: 'service', svc: route.properties.svc, dir: 0 }); }
+    // Click another city's area → switch to it
+    const area = map.queryRenderedFeatures(e.point, { layers: ['area-fill'] }).find((f) => f.properties.id !== data?.region.id);
+    if (area) { sound.play('city'); setRegion(area.properties.id); }
+  });
+
+  map.on('mousemove', (e) => {
+    if (!data) return;
+    const box = /** @type {[[number, number], [number, number]]} */ ([[e.point.x - 6, e.point.y - 6], [e.point.x + 6, e.point.y + 6]]);
+    const stop = map.queryRenderedFeatures(box, { layers: pickable })[0];
+    const route = !stop && view.kind === 'stop' ? map.queryRenderedFeatures(box, { layers: ['sel-line'] })[0] : undefined;
+    if (view.kind === 'stop') focusService(route ? route.properties.svc : -1);
+    map.getCanvas().style.cursor = stop || route ? 'pointer' : '';
+    const showTip = Boolean(route) || (stop && map.getZoom() < 16 && !map.isMoving());
+    if (showTip) {
+      if (route) {
+        tip.textContent = data.region.services[route.properties.svc].no;
+      } else if (stop) {
+        const { code, name } = stop.properties;
+        tip.innerHTML = `${code ? `<span class="tag">${escapeHtml(code)}</span>` : ''}${escapeHtml(name)}`;
+      }
+      tip.style.left = `${e.originalEvent.clientX}px`;
+      tip.style.top = `${e.originalEvent.clientY}px`;
+    }
+    tip.classList.toggle('show', Boolean(showTip));
+  });
+  map.on('movestart', () => tip.classList.remove('show'));
+  map.getCanvas().addEventListener('mouseleave', () => tip.classList.remove('show'));
+
+  const soundBtn = $('sound');
+  soundBtn.setAttribute('aria-pressed', String(sound.on));
+  soundBtn.addEventListener('click', () => soundBtn.setAttribute('aria-pressed', String(sound.toggle())));
+
+  $('zoom-in').addEventListener('click', () => map.zoomIn());
+  $('zoom-out').addEventListener('click', () => map.zoomOut());
+
+  // Near me: jump to the city you're in
+  $('locate').addEventListener('click', () => {
+    navigator.geolocation?.getCurrentPosition(async ({ coords }) => {
+      const here = /** @type {[number, number]} */ ([coords.longitude, coords.latitude]);
+      const inside = regions.find(({ bounds: [w, s, e, n] }) => here[0] >= w && here[0] <= e && here[1] >= s && here[1] <= n);
+      if (inside && inside.id !== regionId) await setRegion(inside.id, { kind: 'home' }, false);
+      map.flyTo({ center: here, zoom: 16, padding: pad(), duration: 900 });
+    }, () => { loading.textContent = 'Location unavailable'; loading.hidden = false; setTimeout(() => { loading.hidden = true; loading.textContent = 'Loading…'; }, 2000); });
+  });
+
+  // Mobile sheet: tap the handle to cycle sizes
+  function setSheet(/** @type {'' | 'expanded' | 'peek'} */ size) {
+    panel.classList.toggle('expanded', size === 'expanded');
+    panel.classList.toggle('peek', size === 'peek');
+  }
+  $('handle').addEventListener('click', () => {
+    setSheet(panel.classList.contains('expanded') ? 'peek' : panel.classList.contains('peek') ? '' : 'expanded');
+  });
+
+  // replaceState doesn't fire this, so it only runs for pasted/edited URLs
+  addEventListener('hashchange', openFromHash);
+
+  await openFromHash();
+</script>
+</body>
+</html>
