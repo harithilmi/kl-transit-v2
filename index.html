@@ -657,6 +657,16 @@
       },
       paint: { 'text-color': '#2b2f38', 'text-halo-color': 'rgba(255,255,255,0.95)', 'text-halo-width': 2, 'text-halo-blur': 0.5 } });
 
+    // Stop hovered in the sidebar: big ring + name, over everything
+    map.addSource('hover-stop', { type: 'geojson', data: fc([]) });
+    map.addLayer({ id: 'hover-stop', type: 'circle', source: 'hover-stop',
+      paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 7, 15, 11, 18, 14], 'circle-color': '#ffffff',
+        'circle-stroke-color': ['get', 'color'], 'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 10, 3, 15, 5] } });
+    map.addLayer({ id: 'hover-stop-label', type: 'symbol', source: 'hover-stop',
+      layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Bold'], 'text-size': 13, 'text-anchor': 'left', 'text-offset': [1.4, 0],
+        'text-max-width': 14, 'text-allow-overlap': true, 'text-ignore-placement': true },
+      paint: { 'text-color': '#2b2f38', 'text-halo-color': '#ffffff', 'text-halo-width': 2 } });
+
     // Selected stop
     map.addSource('pin', { type: 'geojson', data: fc([]) });
     // Same bus icon, just bigger, on a soft ring — busrouter-style, no animation
@@ -756,7 +766,10 @@
       sel = lines[view.svc].map((coords, d) => line(coords, { color, dim: d !== dir }))
         .sort((a, b) => Number(b.properties?.dim) - Number(a.properties?.dim));
       const p = svc.patterns[dir];
-      selStops = p.stops.map((s, k) => point(s, { color, end: k === 0 || k === p.stops.length - 1 }));
+      // A loop ends where it starts: label that terminal once
+      const last = p.stops.length - 1;
+      const loopBack = region.stops[p.stops[last]][2] === region.stops[p.stops[0]][2];
+      selStops = p.stops.map((s, k) => point(s, { color, end: k === 0 || (k === last && !loopBack) }));
     } else if (view.kind === 'stop') {
       const passing = stopServices[view.stop];
       sel = stopLines(view.stop);
@@ -807,7 +820,7 @@
       <button class="row" data-stop="${i}">
         <span class="stop-icon"></span>
         <div class="main"><div class="t">${escapeHtml(s[2])}</div>
-        <div class="s">${stopCode(s)}${stopServices[i].length} bus${stopServices[i].length === 1 ? '' : 'es'}</div></div>
+        ${s[3] ? `<div class="s">${stopCode(s)}</div>` : ''}</div>
       </button>`).join('');
 
     body.innerHTML = (stops.length ? `<h3 class="section-title">Stops</h3>${stopRows}` : '')
@@ -825,7 +838,7 @@
     const dirs = svc.patterns.length > 1
       ? `<div class="dirs">${svc.patterns.map((pt, d) => `
           <button class="${d === dir ? 'active' : ''}" data-dir="${d}"><span>${pt.loop ? 'Loop via' : 'To'} <b>${escapeHtml(pt.to)}</b></span></button>`).join('')}</div>`
-      : `<div class="note">${p.loop ? 'Loop via' : 'To'} <b>${escapeHtml(p.to)}</b></div>`;
+      : ''; // one direction: the title already says where it goes
 
     const rows = p.stops.map((s, k) => {
       const st = region.stops[s];
@@ -833,11 +846,8 @@
       const mins = p.mins ? p.mins[k] : null;
       return `<li class="${k === 0 || k === p.stops.length - 1 ? 'end' : ''}">
         <button class="row" data-stop="${s}">
-          <div class="main"><div class="t">${escapeHtml(st[2])}</div>
-            ${st[3] ? `<div class="s">${stopCode(st)}</div>` : ''}
-            ${others.length ? `<div class="others">${others.map((o) => badge(region.services[o], 'sm')).join('')}</div>` : ''}
-          </div>
-          ${mins !== null && k > 0 ? `<span class="mins">${mins} min</span>` : ''}
+          <div class="main"><div class="t">${escapeHtml(st[2])}</div>${others.length ? `<div class="others">${others.map((o) => badge(region.services[o], 'sm')).join('')}</div>` : ''}</div>
+          ${mins !== null && k > 0 ? `<span class="mins">${mins ? `${mins} min` : '<1 min'}</span>` : ''}
         </button></li>`;
     }).join('');
 
@@ -851,8 +861,8 @@
           <div class="fact"><b>${clock(p.last)}</b><span>Last bus</span></div>
           <div class="fact"><b>${hw ? `~${hw} min` : '—'}</b><span>Every</span></div>
         </div>
-        ${runningNote(p) ? `<div class="note"><span class="off${runningNote(p).startsWith('Ended') ? ' ended' : ''}">${runningNote(p)}</span></div>` : ''}
-        <div class="note">Weekday timetable · ${p.trips} trips · ${p.stops.length} stops${p.mins ? ` · ~${p.mins[p.mins.length - 1]} min end to end` : ''}</div>
+        ${runningNote(p).startsWith('Ended') ? `<div class="note"><span class="off ended">Ended for today</span></div>` : ''}
+        <div class="note">${p.stops.length} stops${p.mins ? ` · ~${p.mins[p.mins.length - 1]} min end to end` : ''}</div>
       </div>
       <ol class="timeline" style="--c:${color}">${rows}</ol>`;
   }
@@ -871,7 +881,7 @@
       const every = headway(main.p);
       return `<button class="row" data-svc="${svcIdx}" data-dir="${main.d}">
           ${badge(svc)}
-          <div class="main"><div class="t">${toText}</div></div>
+          <div class="main"><div class="t wrap">${toText}</div></div>
           ${every ? `<span class="every">every ${every} min</span>` : ''}
         </button>`;
     }).join('');
@@ -908,9 +918,8 @@
   let peeked = -1;
   function peekStop(/** @type {number} */ stop, /** @type {HTMLElement | null} */ row = null) {
     if (!data) return;
-    peeked = stop;
+    peeked = stop; // zoom only; the stop is selected on the 2nd tap
     for (const r of body.querySelectorAll('[data-stop]')) r.classList.toggle('hl', r === row);
-    setPin(stop);
     const s = data.region.stops[stop];
     map.flyTo({ center: [s[0], s[1]], zoom: Math.max(map.getZoom(), 17), padding: pad(), duration: 600 });
   }
@@ -1040,7 +1049,10 @@
   // Hover a bus: preview its line (home), or single it out among the buses at a stop
   let hovered = -1;
   body.addEventListener('pointerover', (e) => {
-    if (!data || view.kind === 'service' || e.pointerType === 'touch') return;
+    if (!data || e.pointerType === 'touch') return;
+    const stopEl = /** @type {HTMLElement | null} */ ((/** @type {HTMLElement} */ (e.target)).closest('[data-stop]'));
+    hoverStop(stopEl ? +(/** @type {string} */ (stopEl.dataset.stop)) : -1);
+    if (view.kind === 'service') return;
     const el = /** @type {HTMLElement | null} */ ((/** @type {HTMLElement} */ (e.target)).closest('[data-svc]'));
     const svcIdx = el ? +(/** @type {string} */ (el.dataset.svc)) : -1;
     focusService(svcIdx);
@@ -1058,7 +1070,15 @@
       for (const row of body.querySelectorAll('[data-svc]')) row.classList.toggle('hl', +(/** @type {HTMLElement} */ (row).dataset.svc ?? -1) === svcIdx);
     }
   }
-  body.addEventListener('pointerleave', () => { hovered = -1; drawSelection(); });
+  body.addEventListener('pointerleave', () => { hovered = -1; hoverStop(-1); drawSelection(); });
+
+  let hoveredStop = -1;
+  function hoverStop(/** @type {number} */ stop) {
+    if (!data || stop === hoveredStop) return;
+    hoveredStop = stop;
+    const color = view.kind === 'service' ? colorOf(data.region.services[view.svc]) : stop >= 0 ? stopColor(stop) : STOP;
+    source('hover-stop').setData(fc(stop >= 0 ? [point(stop, { color })] : []));
+  }
 
   const PEEK_BELOW = 15; // stop icons appear from here
   const pickable = ['pin-halo', 'sel-stops-dot', 'stops-icon', 'stops'];
