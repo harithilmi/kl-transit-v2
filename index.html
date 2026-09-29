@@ -190,7 +190,6 @@
       background: #fff; box-shadow: inset 0 0 0 3px var(--c); pointer-events: none;
     }
     .timeline li.end::after { width: 17px; height: 17px; left: 16px; top: 11px; box-shadow: inset 0 0 0 5px var(--c); }
-    .timeline .mins { color: var(--ink-3); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; padding-top: 1px; }
     .others { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
 
     /* Stop detail: bus mark in the stop's colour, code tag, per-bus frequency on the right */
@@ -287,7 +286,7 @@
 <script type="module">
   // @ts-check
 
-  /** @typedef {{ lines: { id: string, name: string, mode: string, color: string, coords: GeoJSON.Position[][] }[], stations: { name: string, lng: number, lat: number, lines: string[], mode: string }[] }} Transit */
+  /** @typedef {{ lines: { id: string, name: string, mode: string, color: string, pieces: { c: GeoJSON.Position[], s: number, n: number }[] }[], stations: { name: string, lng: number, lat: number, lines: string[], mode: string }[] }} Transit */
   /**
    * @typedef {[lng: number, lat: number, name: string, code: string]} Stop
    * @typedef {{ to: string, loop: boolean, stops: number[], mins: number[] | null, shape: string, trips: number, first: string | null, last: string | null }} Pattern
@@ -574,10 +573,13 @@
     const minor = ['==', ['get', 'mode'], 'ets']; // intercity: thinner, fainter
     const railWidth = (/** @type {number} */ extra) => ['interpolate', ['linear'], ['zoom'],
       8, ['+', ['case', minor, 0.6, 1], extra], 12, ['+', ['case', minor, 1, 2], extra], 16, ['+', ['case', minor, 3, 6], extra], 19, ['+', ['case', minor, 6, 12], extra]];
+    // Shared track: lane s of n, side by side (one line width + a hairline apart)
+    const lane = ['-', ['get', 's'], ['/', ['-', ['get', 'n'], 1], 2]];
+    const railOffset = ['interpolate', ['linear'], ['zoom'], 8, ['*', lane, 1.3], 12, ['*', lane, 2.5], 16, ['*', lane, 7], 19, ['*', lane, 13.5]];
     map.addLayer({ id: 'transit-casing', type: 'line', source: 'transit', filter: ['!', ferry], layout: round,
-      paint: { 'line-color': '#ffffff', 'line-width': railWidth(2), 'line-opacity': 0.5 } });
+      paint: { 'line-color': '#ffffff', 'line-width': railWidth(2), 'line-offset': railOffset, 'line-opacity': 0.5 } });
     map.addLayer({ id: 'transit-line', type: 'line', source: 'transit', filter: ['!', ferry], layout: round,
-      paint: { 'line-color': ['get', 'color'], 'line-width': railWidth(0), 'line-opacity': ['case', minor, 0.2, 0.35] } });
+      paint: { 'line-color': ['get', 'color'], 'line-width': railWidth(0), 'line-offset': railOffset, 'line-opacity': ['case', minor, 0.2, 0.35] } });
     map.addLayer({ id: 'transit-ferry', type: 'line', source: 'transit', filter: ferry, layout: { 'line-cap': 'round' },
       paint: { 'line-color': '#2a8bd6', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1, 14, 3, 18, 6], 'line-dasharray': [1, 2], 'line-opacity': 0.4 } });
     // Line names along the line, in its colour
@@ -602,8 +604,9 @@
     };
     fetch('data/transit.json').then((r) => (r.ok ? r.json() : null)).then((/** @type {Transit | null} */ t) => {
       if (!t) return;
-      source('transit').setData(fc(t.lines.map((l) => ({ type: 'Feature', properties: { mode: l.mode, color: l.color, name: l.name, ink: readable(l.color) },
-        geometry: { type: 'MultiLineString', coordinates: l.coords } }))));
+      source('transit').setData(fc(t.lines.flatMap((l) => l.pieces.map((p) => ({ type: 'Feature',
+        properties: { mode: l.mode, color: l.color, name: l.name, ink: readable(l.color), s: p.s, n: p.n },
+        geometry: { type: 'LineString', coordinates: p.c } })))));
       source('stations').setData(fc(t.stations.map((st) => ({ type: 'Feature', properties: { name: st.name, lines: st.lines, mode: st.mode },
         geometry: { type: 'Point', coordinates: [st.lng, st.lat] } }))));
     });
@@ -893,11 +896,9 @@
     const rows = p.stops.map((s, k) => {
       const st = region.stops[s];
       const others = stopServices[s].filter((o) => o !== svcIdx);
-      const mins = p.mins ? p.mins[k] : null;
       return `<li class="${k === 0 || k === p.stops.length - 1 ? 'end' : ''}">
         <button class="row" data-stop="${s}">
           <div class="main"><div class="t">${escapeHtml(st[2])}${st[3] ? ` <span class="code">${escapeHtml(st[3])}</span>` : ''}</div>${others.length ? `<div class="others">${others.map((o) => badge(region.services[o], 'sm')).join('')}</div>` : ''}</div>
-          ${mins !== null && k > 0 ? `<span class="mins">${mins ? `${mins} min` : '<1 min'}</span>` : ''}
         </button></li>`;
     }).join('');
 

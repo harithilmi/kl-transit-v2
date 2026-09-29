@@ -14,6 +14,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Iterable, NamedTuple
 
+import shapely
 from shapely import LineString, MultiLineString, STRtree, Point
 from shapely.ops import linemerge, nearest_points, unary_union
 
@@ -399,6 +400,60 @@ def merge_stations(raw: list[dict], mode_of: dict[str, str]) -> list[dict]:
     return sorted(out, key=lambda s: s["name"])
 
 
+# ---------- Shared track → parallel lanes ----------
+
+SHARE = 0.0004  # deg ≈ 45 m: lines this close run on the same corridor
+STEP = 0.0004   # sample spacing along a line
+
+
+def lanes(lines: list[Line]) -> list[list[dict]]:
+    """Split each line where the set of lines sharing its track changes. Each piece gets a lane
+    (slot of n) so the frontend can draw shared corridors side by side. ETS is dropped wherever
+    another line already draws the track (it only shows on intercity-only stretches)."""
+    rail = [l for l in lines if l.mode != "ferry"]
+    order = {l.id: i for i, l in enumerate(rail)}
+    zones = {l.id: l.geom.buffer(SHARE) for l in rail}
+    for z in zones.values():
+        shapely.prepare(z)
+    out = []
+    for l in lines:
+        if l.mode == "ferry":
+            out.append([{"c": c, "s": 0, "n": 1} for c in to_coords(l.geom)])
+            continue
+        others = [o for o in rail if o.id != l.id and o.mode != "ets"]  # ETS never takes a lane
+        pieces = []
+        for part in l.geom.geoms:
+            pts = shapely.get_coordinates(shapely.segmentize(part, STEP))
+            share = [frozenset(o.id for o in others if shapely.contains_xy(zones[o.id], x, y)) for x, y in pts]
+            # Smooth blips (crossings, short brushes) into the run before them
+            runs: list[list[int]] = []
+            for i, sh in enumerate(share):
+                if runs and share[runs[-1][0]] == sh:
+                    runs[-1].append(i)
+                else:
+                    runs.append([i])
+            for k in range(1, len(runs)):
+                if len(runs[k]) < 4:
+                    for i in runs[k]:
+                        share[i] = share[runs[k - 1][0]]
+            start = 0
+            for i in range(1, len(pts) + 1):
+                if i == len(pts) or share[i] != share[start]:
+                    seg, sh = pts[start:i + 1], share[start]
+                    start = i
+                    if len(seg) < 2 or (l.mode == "ets" and sh):
+                        continue
+                    group = sorted(sh | {l.id}, key=order.__getitem__)
+                    # One direction per corridor so lane offsets land on the same side for every line
+                    dx, dy = seg[-1][0] - seg[0][0], seg[-1][1] - seg[0][1]
+                    if (dy if abs(dx) < abs(dy) * 0.1 else dx) < 0:
+                        seg = seg[::-1]
+                    for c in to_coords(MultiLineString([LineString(seg)])):
+                        pieces.append({"c": c, "s": group.index(l.id), "n": len(group)})
+        out.append(pieces)
+    return out
+
+
 def main() -> None:
     feats, rels = osm()
     r_lines, r_st = rapid()
@@ -409,13 +464,13 @@ def main() -> None:
     mode_of = {l.id: l.mode for l in lines}
     stations = merge_stations(r_st + k_st + a_st + f_st, mode_of)
     data = {
-        "lines": [{"id": l.id, "name": l.name, "short": l.short, "mode": l.mode, "color": l.color,
-                   "coords": to_coords(l.geom)} for l in lines],
+        "lines": [{"id": l.id, "name": l.name, "short": l.short, "mode": l.mode, "color": l.color, "pieces": p}
+                  for l, p in zip(lines, lanes(lines))],
         "stations": stations,
     }
     OUT.write_text(json.dumps(data, separators=(",", ":"), ensure_ascii=False))
     for l in data["lines"]:
-        print(f"{l['id']:10} {l['mode']:8} {l['color']} parts={len(l['coords']):3} pts={sum(map(len, l['coords'])):5}  {l['name']}")
+        print(f"{l['id']:10} {l['mode']:8} {l['color']} pieces={len(l['pieces']):3} max n={max((p['n'] for p in l['pieces']), default=0)}  {l['name']}")
     print(f"{len(stations)} stations, {OUT.stat().st_size / 1024:.0f} KB → {OUT.relative_to(ROOT)}")
     for gap in gaps:
         print("  straight-line fallback:", gap)
