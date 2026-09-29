@@ -4,11 +4,11 @@ Run: python3 gtfs/build.py   (reads gtfs/raw/<feed>/, writes data/)
 """
 from __future__ import annotations
 
-import csv, hashlib, json, math, re, sys, urllib.error, urllib.request
+import csv, hashlib, os, json, math, re, sys, urllib.error, urllib.request
 from collections import Counter, defaultdict
 from pathlib import Path
 
-from shapely import MultiPoint
+from shapely import LineString, MultiPoint, Point
 from shapely.affinity import scale
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -301,6 +301,11 @@ def build_feed(feed: str, op_idx: int, stops: StopIndex):
             pts = []
         if len(pts) < 2 * len(seq):  # too coarse to follow roads
             pts = road_path([(stops.stops[s][0], stops.stops[s][1]) for s in seq]) or pts
+        else:  # dense but often GPS-noisy: snap the feed's own path onto the roads
+            matched = match_shape(pts, stop_pts)
+            if matched is None and os.environ.get("DEBUG"):
+                print(f"  kept feed shape: {feed} {r.get('route_short_name') or r['route_id']}", file=sys.stderr)
+            pts = matched or pts
         if len(pts) < 2:
             pts = [(stops.stops[s][0], stops.stops[s][1]) for s in seq]
 
@@ -398,6 +403,49 @@ def bearing(a, b) -> int:
     y = math.sin(dlng) * math.cos(lat2)
     x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dlng)
     return round(math.degrees(math.atan2(y, x)) % 360)
+
+
+def despike(pts, max_m=150):
+    """Drop GPS blips: a point where the line doubles straight back (< 25°) over a short hop."""
+    out = list(pts[:1])
+    for b, c in zip(pts[1:], pts[2:]):
+        a = out[-1]
+        v1, v2 = (a[0] - b[0], a[1] - b[1]), (c[0] - b[0], c[1] - b[1])
+        n = math.hypot(*v1) * math.hypot(*v2)
+        sharp = n and (v1[0] * v2[0] + v1[1] * v2[1]) / n > math.cos(math.radians(25))
+        if not (sharp and min(dist_m(a, b), dist_m(b, c)) < max_m):
+            out.append(b)
+    return out + list(pts[-1:])
+
+
+def match_shape(pts, stop_pts):
+    """The feed's own path, snapped onto real roads (Valhalla map-matching); cached.
+    None when the match drifts (much longer/shorter, or stops end up off the line) → keep the feed's shape."""
+    key = "m:" + hashlib.sha1(json.dumps(pts).encode()).hexdigest()
+    if key in snap_cache:
+        return [tuple(p) for p in snap_cache[key]] or None
+    pts = despike(pts)
+    path, ok = None, False
+    for radius in (40, 80):  # tight first; wider for shapes drawn off the carriageway
+        try:
+            path = valhalla("trace_route", {
+                "shape": [{"lon": x, "lat": y} for x, y in pts], "costing": "bus", "shape_match": "map_snap",
+                "trace_options": {"search_radius": radius, "breakage_distance": 2000, "interpolation_distance": 10},
+                "directions_type": "none"})
+        except OSError as e:
+            if not isinstance(e, urllib.error.HTTPError):
+                return None  # server down → don't cache
+            path = None
+        except Exception:
+            path = None
+        if path and len(path) > 1:
+            line = LineString(path)
+            off = sum(line.distance(Point(p)) * 111000 > 60 for p in stop_pts)
+            ok = 0.85 <= length_km(path) / max(length_km(pts), 0.01) <= 1.25 and off <= len(stop_pts) * 0.1
+        if ok:
+            break
+    snap_cache[key] = path if ok else []
+    return path if ok else None
 
 
 def road_path(stop_pts):
