@@ -1031,8 +1031,10 @@
     if (stop) {
       const i = stop.properties.i;
       sound.play('stop');
-      // Zoomed out (dots): 1st click zooms in on the stop, 2nd opens it. Zoomed in (icons): open right away
-      if (map.getZoom() < PEEK_BELOW && peeked !== i && !(view.kind === 'stop' && view.stop === i)) return peekStop(i);
+      // Zoomed out (dots): each click zooms in closer on the stop. Zoomed in (icons): open it
+      if (map.getZoom() < PEEK_BELOW && peeked !== i && !(view.kind === 'stop' && view.stop === i)) {
+        return map.easeTo({ center: stop.geometry.type === 'Point' ? /** @type {[number, number]} */ (stop.geometry.coordinates) : e.lngLat, zoom: map.getZoom() + 2, padding: pad(), duration: 500 });
+      }
       return go({ kind: 'stop', stop: i });
     }
     // At a stop, clicking one of its bus lines opens that bus
