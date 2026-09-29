@@ -199,8 +199,6 @@
     .others { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
 
     /* Stop detail: bus mark in the stop's colour, code tag, per-bus frequency on the right */
-    /* Same as the map's selected stop: white dot, thick ring in the bus colour */
-    .stop-mark { width: 30px; height: 30px; margin: 4px; border-radius: 50%; flex: none; background: #fff; box-shadow: inset 0 0 0 7px var(--c); }
     .code-tag {
       display: inline-block; padding: 1px 6px; margin-right: 4px; border-radius: 6px; background: var(--chip);
       color: var(--ink-2); font-weight: 700; font-variant-numeric: tabular-nums;
@@ -835,7 +833,11 @@
   // ---------- Place search (local Nominatim) ----------
 
   /** @typedef {{ lines: { id: string, name: string, mode: string, color: string, pieces: { c: GeoJSON.Position[], s: number, n: number }[] }[], stations: { name: string, lng: number, lat: number, lines: string[], mode: string }[] }} Transit */
-  /** @typedef {{ lat: string, lon: string, name: string, display_name: string }} NominatimHit */
+  /** @typedef {{ lat: string, lon: string, name: string, display_name: string, category: string, type: string }} NominatimHit */
+  /** OSM's bus stops (our stop search covers them) and train stop positions (the station itself is kept) bury real places */
+  const isBusStop = (/** @type {NominatimHit} */ h) => (h.category === 'highway' && h.type === 'bus_stop')
+    || (h.category === 'railway' && h.type === 'stop')
+    || (h.category === 'public_transport' && (h.type === 'platform' || h.type === 'stop_position'));
 
   const NOMINATIM = 'http://localhost:8088/search';
   /** Latest results. `down` = server off or still importing: back off for a while instead of retrying every keystroke */
@@ -865,13 +867,13 @@
     placeTimer = setTimeout(async () => {
       // Bias (not limit) to the current city: other places still show up, just ranked lower
       const [w, s, e, n] = regions.find((r) => r.id === regionId)?.bounds ?? regions[0].bounds;
-      const params = new URLSearchParams({ q: term, format: 'jsonv2', countrycodes: 'my', limit: '6', viewbox: `${w},${n},${e},${s}`, 'accept-language': 'en' });
+      const params = new URLSearchParams({ q: term, format: 'jsonv2', countrycodes: 'my', limit: '12', viewbox: `${w},${n},${e},${s}`, 'accept-language': 'en' });
       try {
         const res = await fetch(`${NOMINATIM}?${params}`, { signal: AbortSignal.any([ctl.signal, AbortSignal.timeout(5000)]) });
         if (!res.ok) throw new Error(`Nominatim ${res.status}`);
         /** @type {NominatimHit[]} */
         const hits = await res.json();
-        places.hits = hits.map(toPlace);
+        places.hits = hits.filter((h) => !isBusStop(h)).slice(0, 6).map(toPlace);
         places.status = 'ok';
       } catch {
         if (ctl.signal.aborted) return; // a newer keystroke took over
@@ -1045,7 +1047,7 @@
     body.innerHTML = `
       <div class="detail-head">
         <button class="close-x" data-back aria-label="Close">✕</button>
-        <div class="title-row"><span class="stop-mark" style="--c:${stopColor(stopIdx)}"></span>
+        <div class="title-row">
           <div><h2>${escapeHtml(st[2])}</h2>${st[3] ? `<div class="op"><span class="code-tag">${escapeHtml(st[3])}</span></div>` : ''}</div></div>
       </div>
       ${rows || '<div class="empty">No buses</div>'}`;
