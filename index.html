@@ -475,6 +475,18 @@
 
   // Neutral slate: stands out on every operator's route colour
   const STOP = '#4a5264';
+
+  // Rail/ferry context layer
+  const RAIL_FROM = 10; // city scale and closer; zoomed out it's just noise
+  const minor = ['==', ['get', 'mode'], 'ets']; // intercity: thinner, fainter
+  /** Opacity that fades in over 1.5 zoom levels (instead of popping on), scaled by k (dimmed while a bus is shown) */
+  const fadeIn = (/** @type {unknown} */ full, k = 1) => ['interpolate', ['linear'], ['zoom'], RAIL_FROM, 0, RAIL_FROM + 1.5, ['*', full, k]];
+  function railOpacity(k = 1) {
+    map.setPaintProperty('transit-casing', 'line-opacity', fadeIn(0.5, k));
+    map.setPaintProperty('transit-line', 'line-opacity', fadeIn(['case', minor, 0.25, 0.55], k));
+    map.setPaintProperty('transit-ferry', 'line-opacity', fadeIn(0.4, k));
+    map.setPaintProperty('transit-name', 'text-opacity', ['interpolate', ['linear'], ['zoom'], 11, 0, 12, k]);
+  }
   const ACCENT = '#1363b8';
 
   // City areas: the current one is a faint grey tint; other cities are blue, clickable, and light up on hover
@@ -548,11 +560,7 @@
     // Context only: drawn under the bus layers and never clickable
     map.addSource('transit', { type: 'geojson', data: fc([]) });
     map.addSource('stations', { type: 'geojson', data: fc([]) });
-    const RAIL_FROM = 10; // city scale and closer; zoomed out it's just noise
-    // Fades in over 1.5 zoom levels instead of popping on
-    const fadeIn = (/** @type {unknown} */ full) => ['interpolate', ['linear'], ['zoom'], RAIL_FROM, 0, RAIL_FROM + 1.5, full];
     const ferry = ['==', ['get', 'mode'], 'ferry'];
-    const minor = ['==', ['get', 'mode'], 'ets']; // intercity: thinner, fainter
     const railWidth = (/** @type {number} */ extra) => ['interpolate', ['linear'], ['zoom'],
       8, ['+', ['case', minor, 0.5, 0.8], extra], 12, ['+', ['case', minor, 0.8, 1.4], extra], 16, ['+', ['case', minor, 2, 3.5], extra], 19, ['+', ['case', minor, 4, 7], extra]];
     // Shared track: lane s of n, side by side (one line width + a hairline apart)
@@ -832,6 +840,7 @@
     map.setPaintProperty('stops', 'circle-opacity', faded ? 0.45 : 1);
     map.setPaintProperty('stops', 'circle-stroke-opacity', faded ? 0.45 : 1);
     map.setPaintProperty('stops-icon', 'text-opacity', faded ? 0.5 : 1);
+    railOpacity(faded ? 0.35 : 1);
     onRoute = view.kind === 'service' ? region.services[view.svc].patterns[view.dir].stops : [];
     hideStops();
   }
