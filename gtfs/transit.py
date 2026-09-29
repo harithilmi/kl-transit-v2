@@ -1,7 +1,8 @@
 """Static transit overlay (rail + ferry lines, stations) → data/transit.json.
 
 Sources:
-  - Rapid Rail KL GTFS (shapes + colours)       → LRT / MRT / Monorail / BRT
+  - Rapid Rail KL GTFS (colours, stations)      → LRT / MRT / Monorail / BRT, geometry from OSM
+                                                  relations (GTFS shape + Chaikin as fallback)
   - KTMB GTFS (stations + stop order, no shapes) → Komuter / ETS, routed over OSM track
   - OSM extract (osmium CLI)                     → KLIA Ekspres/Transit relations, ferry ways
 
@@ -23,13 +24,13 @@ OUT = ROOT / "data" / "transit.json"
 TMP = Path("/tmp")
 RAIL, KTM = TMP / "rail", TMP / "ktm"
 PBF = Path.home() / "valhalla/malaysia/malaysia-singapore-brunei-latest.osm.pbf"
-CACHE_PBF, CACHE_GEO = TMP / "transit-overlay.osm.pbf", TMP / "transit-overlay.geojsonseq"
+CACHE_PBF, CACHE_GEO = TMP / "transit-overlay-v2.osm.pbf", TMP / "transit-overlay-v2.geojsonseq"
 FEEDS = {
     RAIL: "https://api.data.gov.my/gtfs-static/prasarana?category=rapid-rail-kl",
     KTM: "https://api.data.gov.my/gtfs-static/ktmb",
 }
 
-SIMPLIFY = 0.00012  # deg ≈ 13 m
+SIMPLIFY = 0.00003  # deg ≈ 3 m: keeps curves smooth
 DEDUPE = 0.00025    # deg ≈ 28 m: parallel tracks closer than this collapse into one
 MERGE_M = 300       # same-named stations within this distance become one
 
@@ -134,7 +135,7 @@ def osm() -> tuple[dict[str, dict], list[str]]:
     """Returns ({'w123': feature, 'n45': feature}, relation OPL lines)."""
     if not CACHE_PBF.exists():
         subprocess.run(["osmium", "tags-filter", "-O", "-o", CACHE_PBF, PBF,
-                        "w/railway=rail", "w/route=ferry", "r/route=train,ferry"], check=True)
+                        "w/railway=rail", "w/route=ferry", "r/route=train,ferry,subway,light_rail,monorail"], check=True)
     if not CACHE_GEO.exists():
         subprocess.run(["osmium", "export", "-O", "-f", "geojsonseq", "-u", "type_id",
                         "--geometry-types=linestring,point", "-o", CACHE_GEO, CACHE_PBF], check=True)
@@ -154,7 +155,33 @@ def opl_members(rel_line: str) -> list[tuple[str, str]]:
     return [(ref, unesc(role)) for ref, role in (x.split("@", 1) for x in m.split(",") if x)]
 
 
-# ---------- Rapid Rail KL (GTFS shapes) ----------
+def relation_ways(feats: dict[str, dict], rel: str) -> list[LineString]:
+    """Track geometry of a route relation (skips stop / platform members)."""
+    return [LineString(feats[r]["geometry"]["coordinates"]) for r, role in opl_members(rel)
+            if r[0] == "w" and r in feats and not role.startswith(("stop", "platform"))
+            and feats[r]["geometry"]["type"] == "LineString"]
+
+
+def rel_tags(rel: str) -> dict[str, str]:
+    t = next((p for p in rel.split(" ") if p.startswith("T")), "T")[1:]
+    unesc = lambda v: re.sub(r"%([0-9a-f]+)%", lambda x: chr(int(x.group(1), 16)), v)
+    return {k: unesc(v) for k, v in (kv.split("=", 1) for kv in t.split(",") if "=" in kv)}
+
+
+def chaikin(cs: list[tuple[float, float]], n: int = 2) -> list[tuple[float, float]]:
+    """Corner-cutting smoothing; keeps both endpoints."""
+    for _ in range(n):
+        out = [cs[0]]
+        for (x0, y0), (x1, y1) in zip(cs, cs[1:]):
+            out += [(0.75 * x0 + 0.25 * x1, 0.75 * y0 + 0.25 * y1), (0.25 * x0 + 0.75 * x1, 0.25 * y0 + 0.75 * y1)]
+        cs = [*out, cs[-1]]
+    return cs
+
+
+# ---------- Rapid Rail KL (OSM track, GTFS fallback) ----------
+
+# OSM relation ref (network Rapid KL / RapidRail) → GTFS route_id
+OSM_RAPID_REF = {"AG": "AG", "KJ": "KJ", "SP": "PH", "9": "KGL", "12": "PYL", "MR": "MR", "11": "SA"}
 
 RAPID_MODE = {"AG": "lrt", "KJ": "lrt", "PH": "lrt", "SA": "lrt", "KGL": "mrt", "PYL": "mrt", "MR": "monorail", "BRT": "brt"}
 
@@ -176,22 +203,34 @@ def stop_lines(feed: Path, route_ok: set[str]) -> tuple[dict[str, set[str]], lis
     return members, [[r, *p] for p, r in patterns.items()], trip_route
 
 
-def rapid() -> tuple[list[Line], list[dict]]:
+def rapid(feats: dict[str, dict], rels: list[str]) -> tuple[list[Line], list[dict], dict[str, str]]:
     ensure_feed(RAIL)
     routes = {r["route_id"]: r for r in read_csv(RAIL / "routes.txt")}
     shape_of = {t["route_id"]: t["shape_id"] for t in read_csv(RAIL / "trips.txt") if t["direction_id"] == "0"}
     pts: dict[str, list[tuple[int, float, float]]] = defaultdict(list)
     for p in read_csv(RAIL / "shapes.txt"):
         pts[p["shape_id"]].append((int(p["shape_pt_sequence"]), float(p["shape_pt_lon"]), float(p["shape_pt_lat"])))
-    lines = [
-        Line(rid, r["route_long_name"], r["route_short_name"], RAPID_MODE[rid], "#" + r["route_color"].upper(),
-             MultiLineString([[(x, y) for _, x, y in sorted(pts[shape_of[rid]])]]))
-        for rid, r in routes.items() if rid in RAPID_MODE
-    ]
+    osm_ways: dict[str, list[LineString]] = defaultdict(list)
+    for rel in rels:
+        t = rel_tags(rel)
+        rid = OSM_RAPID_REF.get(t.get("ref", ""))
+        if rid and t.get("route") in ("subway", "light_rail", "monorail") and "rapid" in t.get("network", "").lower():
+            osm_ways[rid] += relation_ways(feats, rel)  # both directions; dedupe collapses them
+    lines, source = [], {}
+    for rid, r in routes.items():
+        if rid not in RAPID_MODE:
+            continue
+        if osm_ways[rid]:
+            geom, source[rid] = dedupe(osm_ways[rid]), "osm"
+        else:  # GTFS shape is coarse (≤1.4 km segments): round off the corners
+            cs = chaikin([(x, y) for _, x, y in sorted(pts[shape_of[rid]])])
+            geom, source[rid] = MultiLineString([cs]), "gtfs"
+        lines.append(Line(rid, r["route_long_name"], r["route_short_name"], RAPID_MODE[rid],
+                          "#" + r["route_color"].upper(), geom))
     members, _, _ = stop_lines(RAIL, set(RAPID_MODE))
     stations = [{"name": nice(s["stop_name"]), "lng": float(s["stop_lon"]), "lat": float(s["stop_lat"]),
                  "lines": sorted(members[s["stop_id"]])} for s in read_csv(RAIL / "stops.txt") if members[s["stop_id"]]]
-    return lines, stations
+    return lines, stations, source
 
 
 # ---------- KTM (GTFS stops, routed along OSM metre-gauge track) ----------
@@ -317,8 +356,7 @@ def airport(feats: dict[str, dict], rels: list[str]) -> tuple[list[Line], list[d
             continue
         lid, name, short, color = AIRPORT[rid]
         mem = opl_members(rel)
-        ways = [LineString(feats[r]["geometry"]["coordinates"]) for r, role in mem if r in feats and r[0] == "w" and not role]
-        lines.append(Line(lid, name, short, "airport", color, dedupe(ways)))
+        lines.append(Line(lid, name, short, "airport", color, dedupe(relation_ways(feats, rel))))
         for r, role in mem:
             f = feats.get(r)
             if r[0] == "n" and role.startswith("stop") and f and f["properties"].get("name"):
@@ -456,7 +494,7 @@ def lanes(lines: list[Line]) -> list[list[dict]]:
 
 def main() -> None:
     feats, rels = osm()
-    r_lines, r_st = rapid()
+    r_lines, r_st, source = rapid(feats, rels)
     k_lines, k_st, gaps = ktm(feats)
     a_lines, a_st = airport(feats, rels)
     f_lines, f_st = ferries(feats)
@@ -470,7 +508,10 @@ def main() -> None:
     }
     OUT.write_text(json.dumps(data, separators=(",", ":"), ensure_ascii=False))
     for l in data["lines"]:
-        print(f"{l['id']:10} {l['mode']:8} {l['color']} pieces={len(l['pieces']):3} max n={max((p['n'] for p in l['pieces']), default=0)}  {l['name']}")
+        cs = [c for p in l["pieces"] for c in p["c"]]
+        seg = max((metres(a, b) for p in l["pieces"] for a, b in zip(p["c"], p["c"][1:])), default=0)
+        print(f"{l['id']:10} {l['mode']:8} {source.get(l['id'], 'osm'):4} pts={len(cs):5} maxseg={seg:5.0f}m "
+              f"pieces={len(l['pieces']):3} max n={max((p['n'] for p in l['pieces']), default=0)}  {l['name']}")
     print(f"{len(stations)} stations, {OUT.stat().st_size / 1024:.0f} KB → {OUT.relative_to(ROOT)}")
     for gap in gaps:
         print("  straight-line fallback:", gap)
