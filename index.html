@@ -572,14 +572,14 @@
     const ferry = ['==', ['get', 'mode'], 'ferry'];
     const minor = ['==', ['get', 'mode'], 'ets']; // intercity: thinner, fainter
     const railWidth = (/** @type {number} */ extra) => ['interpolate', ['linear'], ['zoom'],
-      8, ['+', ['case', minor, 0.6, 1], extra], 12, ['+', ['case', minor, 1, 2], extra], 16, ['+', ['case', minor, 3, 6], extra], 19, ['+', ['case', minor, 6, 12], extra]];
+      8, ['+', ['case', minor, 0.5, 0.8], extra], 12, ['+', ['case', minor, 0.8, 1.4], extra], 16, ['+', ['case', minor, 2, 3.5], extra], 19, ['+', ['case', minor, 4, 7], extra]];
     // Shared track: lane s of n, side by side (one line width + a hairline apart)
     const lane = ['-', ['get', 's'], ['/', ['-', ['get', 'n'], 1], 2]];
-    const railOffset = ['interpolate', ['linear'], ['zoom'], 8, ['*', lane, 1.3], 12, ['*', lane, 2.5], 16, ['*', lane, 7], 19, ['*', lane, 13.5]];
+    const railOffset = ['interpolate', ['linear'], ['zoom'], 8, ['*', lane, 1.1], 12, ['*', lane, 1.9], 16, ['*', lane, 4.2], 19, ['*', lane, 8]];
     map.addLayer({ id: 'transit-casing', type: 'line', source: 'transit', filter: ['!', ferry], layout: round,
-      paint: { 'line-color': '#ffffff', 'line-width': railWidth(2), 'line-offset': railOffset, 'line-opacity': 0.5 } });
+      paint: { 'line-color': '#ffffff', 'line-width': railWidth(1.5), 'line-offset': railOffset, 'line-opacity': 0.5 } });
     map.addLayer({ id: 'transit-line', type: 'line', source: 'transit', filter: ['!', ferry], layout: round,
-      paint: { 'line-color': ['get', 'color'], 'line-width': railWidth(0), 'line-offset': railOffset, 'line-opacity': ['case', minor, 0.2, 0.35] } });
+      paint: { 'line-color': ['get', 'color'], 'line-width': railWidth(0), 'line-offset': railOffset, 'line-opacity': ['case', minor, 0.25, 0.55] } });
     map.addLayer({ id: 'transit-ferry', type: 'line', source: 'transit', filter: ferry, layout: { 'line-cap': 'round' },
       paint: { 'line-color': '#2a8bd6', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1, 14, 3, 18, 6], 'line-dasharray': [1, 2], 'line-opacity': 0.4 } });
     // Line names along the line, in its colour
