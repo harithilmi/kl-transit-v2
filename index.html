@@ -744,9 +744,16 @@
     if (!map.hasImage(icon)) map.addImage(icon, stopIcon(color, 13), { pixelRatio: 2 });
     map.setLayoutProperty('pin-icon', 'icon-image', icon);
     map.setPaintProperty('pin-halo', 'circle-stroke-color', color);
-    const others = stop >= 0 ? ['!=', ['get', 'i'], stop] : null;
-    for (const id of ['stops', 'stops-icon']) map.setFilter(id, others);
-    // Route view: the pin carries the label, so the route's own stop label steps aside
+    pinned = stop;
+    hideStops();
+  }
+
+  // Pinned and hovered stops draw themselves (with their own label), so every other stop layer skips them
+  let pinned = -1, hoveredStop = -1;
+  function hideStops() {
+    const skip = [pinned, hoveredStop].filter((i) => i >= 0);
+    const others = skip.length ? ['!', ['in', ['get', 'i'], ['literal', skip]]] : null;
+    for (const id of ['stops', 'stops-icon', 'sel-stops-dot']) map.setFilter(id, others);
     const routeLabels = ['any', ['get', 'end'], ['>=', ['zoom'], 15]];
     map.setFilter('sel-stops-label', others ? ['all', routeLabels, others] : routeLabels);
   }
@@ -1071,12 +1078,12 @@
   }
   body.addEventListener('pointerleave', () => { hovered = -1; hoverStop(-1); drawSelection(); });
 
-  let hoveredStop = -1;
   function hoverStop(/** @type {number} */ stop) {
     if (!data || stop === hoveredStop) return;
     hoveredStop = stop;
     const color = view.kind === 'service' ? colorOf(data.region.services[view.svc]) : stop >= 0 ? stopColor(stop) : STOP;
     source('hover-stop').setData(fc(stop >= 0 ? [point(stop, { color })] : []));
+    hideStops();
   }
 
   const PEEK_BELOW = 15; // stop icons appear from here
