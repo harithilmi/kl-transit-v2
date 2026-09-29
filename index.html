@@ -835,7 +835,7 @@
         <button class="row" data-stop="${s}">
           <div class="main"><div class="t">${escapeHtml(st[2])}</div>
             ${st[3] ? `<div class="s">${stopCode(st)}</div>` : ''}
-            ${others.length ? `<div class="others">${others.slice(0, 8).map((o) => badge(region.services[o], 'sm')).join('')}${others.length > 8 ? `<span class="s">+${others.length - 8}</span>` : ''}</div>` : ''}
+            ${others.length ? `<div class="others">${others.map((o) => badge(region.services[o], 'sm')).join('')}</div>` : ''}
           </div>
           ${mins !== null && k > 0 ? `<span class="mins">${mins} min</span>` : ''}
         </button></li>`;
