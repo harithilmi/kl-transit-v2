@@ -573,13 +573,18 @@
     const ferry = ['==', ['get', 'mode'], 'ferry'];
     const minor = ['==', ['get', 'mode'], 'ets']; // intercity: thinner, fainter
     const railWidth = (/** @type {number} */ extra) => ['interpolate', ['linear'], ['zoom'],
-      8, ['+', ['case', minor, 0.6, 1], extra], 12, ['+', ['case', minor, 1, 1.8], extra], 16, ['+', ['case', minor, 1.8, 3.5], extra]];
+      8, ['+', ['case', minor, 0.6, 1], extra], 12, ['+', ['case', minor, 1, 2], extra], 16, ['+', ['case', minor, 3, 6], extra], 19, ['+', ['case', minor, 6, 12], extra]];
     map.addLayer({ id: 'transit-casing', type: 'line', source: 'transit', filter: ['!', ferry], layout: round,
       paint: { 'line-color': '#ffffff', 'line-width': railWidth(2), 'line-opacity': 0.5 } });
     map.addLayer({ id: 'transit-line', type: 'line', source: 'transit', filter: ['!', ferry], layout: round,
-      paint: { 'line-color': ['get', 'color'], 'line-width': railWidth(0), 'line-opacity': ['case', minor, 0.25, 0.45] } });
+      paint: { 'line-color': ['get', 'color'], 'line-width': railWidth(0), 'line-opacity': ['case', minor, 0.2, 0.35] } });
     map.addLayer({ id: 'transit-ferry', type: 'line', source: 'transit', filter: ferry, layout: { 'line-cap': 'round' },
-      paint: { 'line-color': '#2a8bd6', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1, 14, 2.5], 'line-dasharray': [1, 2], 'line-opacity': 0.5 } });
+      paint: { 'line-color': '#2a8bd6', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1, 14, 3, 18, 6], 'line-dasharray': [1, 2], 'line-opacity': 0.4 } });
+    // Line names along the line, in its colour
+    map.addLayer({ id: 'transit-name', type: 'symbol', source: 'transit', minzoom: 11,
+      layout: { 'symbol-placement': 'line', 'symbol-spacing': 350, 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Bold'],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 11, 10, 16, 12], 'text-keep-upright': true, 'text-max-angle': 30 },
+      paint: { 'text-color': ['case', ferry, '#2a8bd6', ['get', 'ink']], 'text-halo-color': '#ffffff', 'text-halo-width': 2 } });
     const interchange = ['>', ['length', ['get', 'lines']], 1];
     map.addLayer({ id: 'station-dot', type: 'circle', source: 'stations', minzoom: 11,
       paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, ['case', interchange, 3.5, 2.5], 16, ['case', interchange, 7, 5]],
@@ -589,9 +594,15 @@
         'text-variable-anchor': ['top', 'bottom', 'left', 'right'], 'text-radial-offset': 0.8, 'text-max-width': 9, 'text-optional': true,
         'symbol-sort-key': ['case', interchange, 0, 1] },
       paint: { 'text-color': '#7a8190', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 } });
+    /** Light line colours (MRT yellow, monorail lime) darkened so their names read on the map */
+    const readable = (/** @type {string} */ hex) => {
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+      const k = 0.299 * r + 0.587 * g + 0.114 * b > 150 ? 0.55 : 1;
+      return `rgb(${[r, g, b].map((c) => Math.round(c * k)).join(',')})`;
+    };
     fetch('data/transit.json').then((r) => (r.ok ? r.json() : null)).then((/** @type {Transit | null} */ t) => {
       if (!t) return;
-      source('transit').setData(fc(t.lines.map((l) => ({ type: 'Feature', properties: { mode: l.mode, color: l.color },
+      source('transit').setData(fc(t.lines.map((l) => ({ type: 'Feature', properties: { mode: l.mode, color: l.color, name: l.name, ink: readable(l.color) },
         geometry: { type: 'MultiLineString', coordinates: l.coords } }))));
       source('stations').setData(fc(t.stations.map((st) => ({ type: 'Feature', properties: { name: st.name, lines: st.lines, mode: st.mode },
         geometry: { type: 'Point', coordinates: [st.lng, st.lat] } }))));
