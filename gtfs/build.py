@@ -418,6 +418,12 @@ def despike(pts, max_m=150):
     return out + list(pts[-1:])
 
 
+def drift(a: LineString, b: LineString, step_m=25, far_m=60) -> float:
+    """Share of line a (sampled every step_m) lying more than far_m from line b."""
+    n = max(2, int(a.length * 111000 / step_m))
+    return sum(b.distance(a.interpolate(i / n, normalized=True)) * 111000 > far_m for i in range(n + 1)) / (n + 1)
+
+
 def match_shape(pts, stop_pts):
     """The feed's own path, snapped onto real roads (Valhalla map-matching); cached.
     None when the match drifts (much longer/shorter, or stops end up off the line) → keep the feed's shape."""
@@ -439,9 +445,10 @@ def match_shape(pts, stop_pts):
         except Exception:
             path = None
         if path and len(path) > 1:
-            line = LineString(path)
+            line, orig = LineString(path), LineString(pts)
             off = sum(line.distance(Point(p)) * 111000 > 60 for p in stop_pts)
-            ok = 0.85 <= length_km(path) / max(length_km(pts), 0.01) <= 1.25 and off <= len(stop_pts) * 0.1
+            ok = (0.85 <= length_km(path) / max(length_km(pts), 0.01) <= 1.25 and off <= len(stop_pts) * 0.1
+                  and drift(orig, line) <= 0.03 and drift(line, orig) <= 0.03)  # no skipped detours, no invented ones
         if ok:
             break
     snap_cache[key] = path if ok else []
