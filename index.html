@@ -979,6 +979,12 @@
     return 0.299 * r + 0.587 * g + 0.114 * b > 170 ? '#1d1d1f' : '#fff';
   };
 
+  /** Komuter lines share one chip, so it gets KTM's brand blue rather than one line's colour */
+  const chipStyle = (/** @type {Transit['lines'][number]} */ l) => {
+    const c = l.mode === 'komuter' ? '#1c4c9c' : l.color;
+    return `--c:${c};color:${inkOn(c)}`;
+  };
+
   /** Rail/ferry lines at stations within a short walk of a stop, nearest first */
   function railNear(/** @type {number} */ stop) {
     if (!transit || !data) return [];
@@ -1001,7 +1007,7 @@
 
   function railChips(/** @type {number} */ stop) {
     return railNear(stop).map(({ line, station, d }) =>
-      `<span class="rail" style="--c:${line.color};color:${inkOn(line.color)}" title="${escapeHtml(`${line.name} · ${station} · ${Math.round(d / 10) * 10} m`)}">${railCode(line)}</span>`).join('');
+      `<span class="rail" style="${chipStyle(line)}" title="${escapeHtml(`${line.name} · ${station} · ${Math.round(d / 10) * 10} m`)}">${railCode(line)}</span>`).join('');
   }
 
   /** Stop panel: each nearby line with its station and walk */
@@ -1010,7 +1016,7 @@
     if (!near.length) return '';
     const byStation = Map.groupBy(near, (n) => n.station);
     return `<div class="rail-list">${[...byStation].map(([station, ls]) =>
-      `<div>${ls.map(({ line }) => `<span class="rail" style="--c:${line.color};color:${inkOn(line.color)}">${railCode(line)}</span>`).join(' ')}
+      `<div>${ls.map(({ line }) => `<span class="rail" style="${chipStyle(line)}">${railCode(line)}</span>`).join(' ')}
         ${escapeHtml(station)} <span class="s">· ${distance(ls[0].d)} walk</span></div>`).join('')}</div>`;
   }
 
