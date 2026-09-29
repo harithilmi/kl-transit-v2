@@ -451,7 +451,7 @@ def service_area(pts, walk_m=500, close_m=1500):
     polys = [p for p in getattr(area, "geoms", [area]) if p.area > 1e6]  # drop specks under 1 km²
     out = []
     for p in polys:
-        p = scale(Polygon(p.exterior, [h for h in p.interiors if Polygon(h).area > 2e6]), 1 / kx, 1 / ky, origin=(0, 0))
+        p = scale(Polygon(p.exterior), 1 / kx, 1 / ky, origin=(0, 0))  # outer border only; inner gaps read as noise
         out.append([[[round(x, 5), round(y, 5)] for x, y in ring.coords] for ring in [p.exterior, *p.interiors]])
     return out  # GeoJSON MultiPolygon coordinates
 

@@ -121,7 +121,10 @@
     /* Service number badge */
     .badge {
       display: inline-grid; place-items: center; min-width: 46px; height: 26px; padding: 0 7px; border-radius: 7px;
-      background: var(--c, var(--accent)); color: #fff; font-weight: 800; font-size: 13px;
+      --b: var(--c, var(--accent));
+      /* flat, same hue as the route line: colour → a lighter shade of it */
+      background: linear-gradient(90deg, var(--b) 30%, color-mix(in oklab, var(--b) 78%, white));
+      color: #fff; font-weight: 800; font-size: 13px;
       font-variant-numeric: tabular-nums; letter-spacing: -0.01em; white-space: nowrap; flex: none;
     }
     .row > .badge { min-width: 60px; } /* one column width so names line up */
@@ -530,7 +533,7 @@
       layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Bold'], 'text-size': 12 },
       paint: { 'text-color': STOP, 'text-opacity': 0.7, 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 } });
 
-    // Stops by zoom (busrouter's principle): < 14 tiny dots · 14+ icons · 15+ code · 16+ code + name.
+    // Stops by zoom (busrouter's principle, one level later so the map stays calm): < 15 dots · 15+ icons · 16+ code · 17+ name + code.
     // No special terminus icons: Malaysian route ends aren't SG-style interchanges.
     // MY riders know stops by name (codes aren't on most poles, unlike SG): name leads, code is a small grey hint
     const hasCode = ['!=', ['coalesce', ['get', 'code'], ''], ''];
@@ -540,24 +543,24 @@
       ['format', ['get', 'name'], { 'text-color': '#2b2f38' }]];
     map.addImage('stop-icon', stopIcon(STOP, 13), { pixelRatio: 2 });
     map.addSource('stops', { type: 'geojson', tolerance: 10, buffer: 0, data: fc([]) });
-    map.addLayer({ id: 'stops', type: 'circle', source: 'stops', maxzoom: 14,
+    map.addLayer({ id: 'stops', type: 'circle', source: 'stops', maxzoom: 15,
       paint: {
-        'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 0.75, 14, 4],
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 0.75, 15, 4],
         'circle-color': STOP,
         'circle-stroke-color': '#ffffff',
         'circle-stroke-width': 1,
         'circle-stroke-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0, 13.5, 1],
       } });
-    map.addLayer({ id: 'stops-icon', type: 'symbol', source: 'stops', minzoom: 14,
+    map.addLayer({ id: 'stops-icon', type: 'symbol', source: 'stops', minzoom: 15,
       layout: {
         'icon-image': 'stop-icon',
         // ≈ busrouter's 14 / 17 / 20 px (its 34px icon at 0.4 / 0.5 / 0.6)
-        'icon-size': ['step', ['zoom'], 0.46, 15, 0.56, 16, 0.66],
+        'icon-size': ['step', ['zoom'], 0.46, 16, 0.56, 17, 0.66],
         'icon-allow-overlap': true,
         'icon-padding': 0.5,
-        'text-field': ['step', ['zoom'], '', 15, shortLabel, 16, nameAndCode],
+        'text-field': ['step', ['zoom'], '', 16, shortLabel, 17, nameAndCode],
         'text-font': ['Noto Sans Bold'],
-        'text-size': ['step', ['zoom'], 11, 16, 12.5],
+        'text-size': ['step', ['zoom'], 11, 17, 12.5],
         'text-anchor': 'left', 'text-justify': 'left', 'text-offset': [0.8, 0],
         'text-max-width': 12, 'text-line-height': 1.1, 'text-padding': 0.5, 'text-optional': true,
       },
@@ -610,9 +613,9 @@
         'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 10, ['case', ['get', 'end'], 2.5, 1.2], 15, ['case', ['get', 'end'], 4, 2.4]],
       } });
     map.addLayer({ id: 'sel-stops-label', type: 'symbol', source: 'sel-stops',
-      filter: ['any', ['get', 'end'], ['>=', ['zoom'], 14]],
+      filter: ['any', ['get', 'end'], ['>=', ['zoom'], 15]],
       layout: {
-        'text-field': ['step', ['zoom'], ['get', 'name'], 15,
+        'text-field': ['step', ['zoom'], ['get', 'name'], 16,
           ['case', hasCode, ['format', ['get', 'name'], {}, '\n', {}, ['get', 'code'], { 'font-scale': 0.85, 'text-font': ['literal', ['Noto Sans Regular']], 'text-color': '#7a8190' }], ['get', 'name']]],
         'text-font': ['Noto Sans Bold'], 'text-size': ['case', ['get', 'end'], 13, 11.5], 'text-line-height': 1.15, 'text-letter-spacing': 0.01,
         // Beside the dot, left-aligned, flipping sides to dodge the line/other labels
@@ -631,8 +634,8 @@
     map.addLayer({ id: 'pin-icon', type: 'symbol', source: 'pin',
       layout: { 'icon-image': 'stop-icon', 'icon-size': ['interpolate', ['linear'], ['zoom'], 10, 0.7, 16, 0.9], 'icon-allow-overlap': true, 'icon-ignore-placement': true,
         // Own label, pushed past the ring (the regular stop layer skips this stop)
-        'text-field': ['step', ['zoom'], '', 15, shortLabel, 16, nameAndCode], 'text-font': ['Noto Sans Bold'],
-        'text-size': ['step', ['zoom'], 11, 16, 12.5], 'text-anchor': 'left', 'text-justify': 'left', 'text-offset': [1.5, 0],
+        'text-field': ['step', ['zoom'], '', 16, shortLabel, 17, nameAndCode], 'text-font': ['Noto Sans Bold'],
+        'text-size': ['step', ['zoom'], 11, 17, 12.5], 'text-anchor': 'left', 'text-justify': 'left', 'text-offset': [1.5, 0],
         'text-max-width': 12, 'text-line-height': 1.1, 'text-allow-overlap': true },
       paint: { 'text-color': STOP, 'text-halo-color': '#ffffff', 'text-halo-width': 1.2 } });
 
@@ -694,6 +697,9 @@
     source('pin').setData(fc(stop >= 0 ? [point(stop)] : []));
     const others = stop >= 0 ? ['!=', ['get', 'i'], stop] : null;
     for (const id of ['stops', 'stops-icon']) map.setFilter(id, others);
+    // Route view: the pin carries the label, so the route's own stop label steps aside
+    const routeLabels = ['any', ['get', 'end'], ['>=', ['zoom'], 15]];
+    map.setFilter('sel-stops-label', others ? ['all', routeLabels, others] : routeLabels);
   }
 
   function drawSelection() {
@@ -868,7 +874,7 @@
     for (const r of body.querySelectorAll('.timeline .row')) r.classList.toggle('hl', r === row);
     setPin(stop);
     const s = data.region.stops[stop];
-    map.flyTo({ center: [s[0], s[1]], zoom: Math.max(map.getZoom(), 16.5), padding: pad(), duration: 600 });
+    map.flyTo({ center: [s[0], s[1]], zoom: Math.max(map.getZoom(), 17), padding: pad(), duration: 600 });
   }
 
   let fromStop = -1; // stop a bus was opened from, so ✕ returns there
@@ -1037,7 +1043,7 @@
     const route = !stop && view.kind === 'stop' ? map.queryRenderedFeatures(box, { layers: ['sel-line'] })[0] : undefined;
     if (view.kind === 'stop') focusService(route ? route.properties.svc : -1);
     map.getCanvas().style.cursor = stop || route ? 'pointer' : '';
-    const showTip = Boolean(route) || (stop && map.getZoom() < 16 && !map.isMoving());
+    const showTip = Boolean(route) || (stop && map.getZoom() < 17 && !map.isMoving());
     if (showTip) {
       if (route) {
         tip.textContent = data.region.services[route.properties.svc].no;
