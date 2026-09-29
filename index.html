@@ -781,10 +781,16 @@
 
   // Pinned and hovered stops draw themselves (with their own label), so every other stop layer skips them
   let pinned = -1, hoveredStop = -1;
+  /** @type {number[]} stops of the bus being viewed (drawn by the route layers) */
+  let onRoute = [];
   function hideStops() {
-    const skip = [pinned, hoveredStop].filter((i) => i >= 0);
-    const others = skip.length ? ['!', ['in', ['get', 'i'], ['literal', skip]]] : null;
-    for (const id of ['stops', 'stops-icon', 'sel-stops-dot']) map.setFilter(id, others);
+    const without = (/** @type {number[]} */ ids) => {
+      const skip = ids.filter((i) => i >= 0);
+      return skip.length ? ['!', ['in', ['get', 'i'], ['literal', skip]]] : null;
+    };
+    for (const id of ['stops', 'stops-icon']) map.setFilter(id, without([pinned, hoveredStop, ...onRoute]));
+    const others = without([pinned, hoveredStop]);
+    map.setFilter('sel-stops-dot', others);
     const routeLabels = ['any', ['get', 'end'], ['>=', ['zoom'], 15]];
     map.setFilter('sel-stops-label', others ? ['all', routeLabels, others] : routeLabels);
   }
@@ -818,8 +824,13 @@
     // The place marker stays while you look at stops/buses opened from it
     const place = view.kind === 'place' ? view.place : view.kind === 'home' ? null : fromPlace;
     source('place').setData(fc(place ? [{ type: 'Feature', properties: { name: place.name }, geometry: { type: 'Point', coordinates: [place.lng, place.lat] } }] : []));
-    const stopsVis = view.kind === 'service' ? 'none' : 'visible';
-    for (const id of ['stops', 'stops-icon']) map.setLayoutProperty(id, 'visibility', stopsVis);
+    // Bus view: other stops stay (faded) for context; the route's own stops are drawn by the route layers
+    const faded = view.kind === 'service';
+    map.setPaintProperty('stops', 'circle-opacity', faded ? 0.45 : 1);
+    map.setPaintProperty('stops', 'circle-stroke-opacity', faded ? 0.45 : 1);
+    map.setPaintProperty('stops-icon', 'text-opacity', faded ? 0.5 : 1);
+    onRoute = view.kind === 'service' ? region.services[view.svc].patterns[view.dir].stops : [];
+    hideStops();
   }
 
   /** @param {[number, number][]} coords */
