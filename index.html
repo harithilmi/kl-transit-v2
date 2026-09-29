@@ -868,7 +868,7 @@
 
   /** @param {View} next @param {{ fly?: boolean }} opts */
   let peeked = -1;
-  function peekStop(/** @type {number} */ stop, /** @type {HTMLElement} */ row) {
+  function peekStop(/** @type {number} */ stop, /** @type {HTMLElement | null} */ row = null) {
     if (!data) return;
     peeked = stop;
     for (const r of body.querySelectorAll('[data-stop]')) r.classList.toggle('hl', r === row);
@@ -1022,12 +1022,19 @@
   }
   body.addEventListener('pointerleave', () => { hovered = -1; drawSelection(); });
 
-  const pickable = ['sel-stops-dot', 'stops-icon', 'stops'];
+  const PEEK_BELOW = 15; // stop icons appear from here
+  const pickable = ['pin-halo', 'sel-stops-dot', 'stops-icon', 'stops'];
   map.on('click', (e) => {
     if (!data) return;
     const box = /** @type {[[number, number], [number, number]]} */ ([[e.point.x - 8, e.point.y - 8], [e.point.x + 8, e.point.y + 8]]);
     const stop = map.queryRenderedFeatures(box, { layers: pickable.filter((l) => map.getLayer(l)) })[0];
-    if (stop) { sound.play('stop'); return go({ kind: 'stop', stop: stop.properties.i }); }
+    if (stop) {
+      const i = stop.properties.i;
+      sound.play('stop');
+      // Zoomed out (dots): 1st click zooms in on the stop, 2nd opens it. Zoomed in (icons): open right away
+      if (map.getZoom() < PEEK_BELOW && peeked !== i && !(view.kind === 'stop' && view.stop === i)) return peekStop(i);
+      return go({ kind: 'stop', stop: i });
+    }
     // At a stop, clicking one of its bus lines opens that bus
     const route = view.kind === 'stop' ? map.queryRenderedFeatures(box, { layers: ['sel-line'] })[0] : undefined;
     if (route) { sound.play('bus'); return go({ kind: 'service', svc: route.properties.svc, dir: 0 }); }
