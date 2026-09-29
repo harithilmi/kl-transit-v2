@@ -8,7 +8,7 @@ import csv, hashlib, json, math, re, sys, urllib.error, urllib.request
 from collections import Counter, defaultdict
 from pathlib import Path
 
-from shapely import MultiPoint, Polygon, unary_union
+from shapely import MultiPoint
 from shapely.affinity import scale
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -441,19 +441,13 @@ def road_path(stop_pts):
     return path
 
 
-def service_area(pts, walk_m=500, close_m=1500):
-    """Area a region's buses serve: a walk_m catchment round every stop, gaps under ~close_m bridged, edges smoothed."""
+def service_area(pts, pad_m=2000):
+    """Area a region's buses serve: one smooth outline round all its stops (convex hull, padded pad_m, rounded corners)."""
     lat0 = sum(y for _, y in pts) / len(pts)
     kx, ky = 111320 * math.cos(math.radians(lat0)), 110540  # degrees → metres (local, flat)
-    metres = MultiPoint([(x * kx, y * ky) for x, y in pts])
-    area = unary_union(metres.buffer(walk_m, quad_segs=6)).buffer(close_m, quad_segs=6).buffer(-close_m, quad_segs=6)
-    area = area.simplify(60)
-    polys = [p for p in getattr(area, "geoms", [area]) if p.area > 1e6]  # drop specks under 1 km²
-    out = []
-    for p in polys:
-        p = scale(Polygon(p.exterior), 1 / kx, 1 / ky, origin=(0, 0))  # outer border only; inner gaps read as noise
-        out.append([[[round(x, 5), round(y, 5)] for x, y in ring.coords] for ring in [p.exterior, *p.interiors]])
-    return out  # GeoJSON MultiPolygon coordinates
+    hull = MultiPoint([(x * kx, y * ky) for x, y in pts]).convex_hull.buffer(pad_m, quad_segs=12).simplify(50)
+    ring = scale(hull, 1 / kx, 1 / ky, origin=(0, 0)).exterior
+    return [[[[round(x, 5), round(y, 5)] for x, y in ring.coords]]]  # GeoJSON MultiPolygon coordinates
 
 
 def natural(s: str):
