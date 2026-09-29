@@ -916,10 +916,9 @@
 
   /** @param {View} next @param {{ fly?: boolean }} opts */
   let peeked = -1;
-  function peekStop(/** @type {number} */ stop, /** @type {HTMLElement | null} */ row = null) {
+  function peekStop(/** @type {number} */ stop) {
     if (!data) return;
-    peeked = stop; // zoom only; the stop is selected on the 2nd tap
-    for (const r of body.querySelectorAll('[data-stop]')) r.classList.toggle('hl', r === row);
+    peeked = stop; // zoom only (no highlight); the stop is selected on the 2nd tap
     const s = data.region.stops[stop];
     map.flyTo({ center: [s[0], s[1]], zoom: Math.max(map.getZoom(), 17), padding: pad(), duration: 600 });
   }
@@ -1040,7 +1039,7 @@
     if (el.dataset.stop) {
       const stop = +el.dataset.stop;
       // Any stop row in the sidebar (busrouter-style): 1st tap zooms to the stop, 2nd opens it
-      if (peeked !== stop && !(view.kind === 'stop' && view.stop === stop)) return peekStop(stop, el);
+      if (peeked !== stop && !(view.kind === 'stop' && view.stop === stop)) return peekStop(stop);
       return go({ kind: 'stop', stop });
     }
     if (el.dataset.dir && view.kind === 'service') return go({ ...view, dir: +el.dataset.dir });
