@@ -462,6 +462,20 @@
 
   // Neutral slate: stands out on every operator's route colour
   const STOP = '#4a5264';
+  const ACCENT = '#1363b8';
+
+  // City areas: the current one is a faint grey tint; other cities are blue, clickable, and light up on hover
+  const areaHover = ['boolean', ['feature-state', 'hover'], false];
+  const areaColor = (/** @type {string} */ current) => ['case', ['==', ['get', 'id'], current], STOP, ACCENT];
+  const areaFill = (/** @type {string} */ current) => ({
+    'fill-color': areaColor(current),
+    'fill-opacity': ['case', ['==', ['get', 'id'], current], 0.035, areaHover, 0.16, 0.06],
+  });
+  const areaLineOpacity = (/** @type {string} */ current) => ['interpolate', ['linear'], ['zoom'],
+    8, ['case', ['==', ['get', 'id'], current], 0.55, areaHover, 1, 0.6], 15, ['case', ['==', ['get', 'id'], current], 0.25, areaHover, 1, 0.6]];
+  // Searched place marker (matches .place-icon) and how far "nearby" stops reach, in metres
+  const PLACE = '#d6453a';
+  const WALK = 500;
 
   /** Round stop marker with a little bus, drawn at 2× */
   function stopIcon(/** @type {string} */ fill, /** @type {number} */ r) {
@@ -520,18 +534,17 @@
     const round = /** @type {const} */ ({ 'line-cap': 'round', 'line-join': 'round' });
 
     // Service areas: every city's catchment (500 m walk round its stops). Current city tinted, others a quiet outline you can click
-    map.addSource('areas', { type: 'geojson', data: fc(regions.map((r) => ({ type: 'Feature', properties: { id: r.id, name: r.name },
+    map.addSource('areas', { type: 'geojson', promoteId: 'id', data: fc(regions.map((r) => ({ type: 'Feature', properties: { id: r.id, name: r.name },
       geometry: { type: 'MultiPolygon', coordinates: r.area } }))) });
-    const current = ['==', ['get', 'id'], ''];
-    map.addLayer({ id: 'area-fill', type: 'fill', source: 'areas',
-      paint: { 'fill-color': STOP, 'fill-opacity': ['case', current, 0.035, 0] } });
+    map.addLayer({ id: 'area-fill', type: 'fill', source: 'areas', paint: areaFill('') });
     map.addLayer({ id: 'area-line', type: 'line', source: 'areas', layout: round,
-      paint: { 'line-color': STOP, 'line-dasharray': [2, 2],
-        'line-width': ['interpolate', ['linear'], ['zoom'], 6, 1, 14, 2],
-        'line-opacity': ['interpolate', ['linear'], ['zoom'], 8, ['case', current, 0.55, 0.3], 15, ['case', current, 0.25, 0.3]] } });
-    map.addLayer({ id: 'area-label', type: 'symbol', source: 'areas', maxzoom: 11, filter: ['!', current],
-      layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Bold'], 'text-size': 12 },
-      paint: { 'text-color': STOP, 'text-opacity': 0.7, 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 } });
+      paint: { 'line-color': areaColor(''), 'line-dasharray': [2, 2],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 6, ['case', areaHover, 2, 1], 14, ['case', areaHover, 3, 2]],
+        'line-opacity': areaLineOpacity('') } });
+    // Other cities: name + arrow, reads as "go here"
+    map.addLayer({ id: 'area-label', type: 'symbol', source: 'areas', maxzoom: 12, filter: ['!=', ['get', 'id'], ''],
+      layout: { 'text-field': ['concat', ['get', 'name'], '  →'], 'text-font': ['Noto Sans Bold'], 'text-size': 13 },
+      paint: { 'text-color': ACCENT, 'text-halo-color': '#ffffff', 'text-halo-width': 1.8 } });
 
     // Stops by zoom (busrouter's principle, one level later so the map stays calm): < 15 dots · 15+ icons · 16+ code · 17+ name + code.
     // No special terminus icons: Malaysian route ends aren't SG-style interchanges.
@@ -667,10 +680,11 @@
     if (!data) return;
     source('stops').setData(fc(data.region.stops.map((_, i) => point(i))));
     // Mark the current city's area (the expressions compare against its id)
-    const current = ['==', ['get', 'id'], data.region.id];
-    map.setPaintProperty('area-fill', 'fill-opacity', ['case', current, 0.035, 0]);
-    map.setPaintProperty('area-line', 'line-opacity', ['interpolate', ['linear'], ['zoom'], 8, ['case', current, 0.55, 0.3], 15, ['case', current, 0.25, 0.3]]);
-    map.setFilter('area-label', ['!', current]);
+    const { id } = data.region;
+    for (const [k, v] of Object.entries(areaFill(id))) map.setPaintProperty('area-fill', k, v);
+    map.setPaintProperty('area-line', 'line-color', areaColor(id));
+    map.setPaintProperty('area-line', 'line-opacity', areaLineOpacity(id));
+    map.setFilter('area-label', ['!=', ['get', 'id'], id]);
   }
 
   /** The colour most buses at a stop share — all their lines use it, so the map stays calm */
@@ -1048,7 +1062,7 @@
     if (route) { sound.play('bus'); return go({ kind: 'service', svc: route.properties.svc, dir: 0 }); }
     // Click another city's area → switch to it
     const area = map.queryRenderedFeatures(e.point, { layers: ['area-fill'] }).find((f) => f.properties.id !== data?.region.id);
-    if (area) { sound.play('city'); setRegion(area.properties.id); }
+    if (area) { sound.play('city'); hoverArea(''); setRegion(area.properties.id); }
   });
 
   map.on('mousemove', (e) => {
@@ -1057,10 +1071,14 @@
     const stop = map.queryRenderedFeatures(box, { layers: pickable })[0];
     const route = !stop && view.kind === 'stop' ? map.queryRenderedFeatures(box, { layers: ['sel-line'] })[0] : undefined;
     if (view.kind === 'stop') focusService(route ? route.properties.svc : -1);
-    map.getCanvas().style.cursor = stop || route ? 'pointer' : '';
-    const showTip = Boolean(route) || (stop && map.getZoom() < 17 && !map.isMoving());
+    const area = stop || route ? undefined : map.queryRenderedFeatures(e.point, { layers: ['area-fill'] }).find((f) => f.properties.id !== data?.region.id);
+    hoverArea(area ? String(area.properties.id) : '');
+    map.getCanvas().style.cursor = stop || route || area ? 'pointer' : '';
+    const showTip = Boolean(route) || Boolean(area) || (stop && map.getZoom() < 17 && !map.isMoving());
     if (showTip) {
-      if (route) {
+      if (area) {
+        tip.textContent = `Switch to ${area.properties.name}`;
+      } else if (route) {
         tip.textContent = data.region.services[route.properties.svc].no;
       } else if (stop) {
         const { code, name } = stop.properties;
@@ -1072,7 +1090,7 @@
     tip.classList.toggle('show', Boolean(showTip));
   });
   map.on('movestart', () => tip.classList.remove('show'));
-  map.getCanvas().addEventListener('mouseleave', () => tip.classList.remove('show'));
+  map.getCanvas().addEventListener('mouseleave', () => { tip.classList.remove('show'); hoverArea(''); });
 
   const soundBtn = $('sound');
   soundBtn.setAttribute('aria-pressed', String(sound.on));
