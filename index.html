@@ -853,7 +853,7 @@
       const mins = p.mins ? p.mins[k] : null;
       return `<li class="${k === 0 || k === p.stops.length - 1 ? 'end' : ''}">
         <button class="row" data-stop="${s}">
-          <div class="main"><div class="t">${escapeHtml(st[2])}</div>${others.length ? `<div class="others">${others.map((o) => badge(region.services[o], 'sm')).join('')}</div>` : ''}</div>
+          <div class="main"><div class="t">${escapeHtml(st[2])}${st[3] ? ` <span class="code">${escapeHtml(st[3])}</span>` : ''}</div>${others.length ? `<div class="others">${others.map((o) => badge(region.services[o], 'sm')).join('')}</div>` : ''}</div>
           ${mins !== null && k > 0 ? `<span class="mins">${mins ? `${mins} min` : '<1 min'}</span>` : ''}
         </button></li>`;
     }).join('');

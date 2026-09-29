@@ -206,6 +206,8 @@ def build_feed(feed: str, op_idx: int, stops: StopIndex):
         except ValueError:
             continue
         code = s.get("stop_code", "") if codes_ok else ""
+        if code.upper().startswith("DUMMY"):  # placeholder codes in the feed, not on any pole
+            code = ""
         name = s["stop_name"]
         # Rapid KL puts the stop code in the name: "KL1821 Pasar Seni"
         if m := re.fullmatch(r"([A-Z]{1,3}\d{2,5})\s+(.+)", name):
