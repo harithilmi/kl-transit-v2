@@ -774,6 +774,7 @@
   }
 
   /** All buses through a stop in one colour; `focus` (a service) keeps its own colour, the rest fade */
+  let showAll = false; // stop view: "Show all passing routes" toggled on
   function stopLines(/** @type {number} */ stop, focus = -1) {
     if (!data) return [];
     const { region, lines, stopServices } = data;
@@ -829,8 +830,8 @@
       const loopBack = region.stops[p.stops[last]][2] === region.stops[p.stops[0]][2];
       selStops = p.stops.map((s, k) => point(s, { color, end: k === 0 || (k === last && !loopBack) }));
     } else if (view.kind === 'stop') {
-      const passing = stopServices[view.stop];
-      sel = stopLines(view.stop);
+      // No lines by default: the rider asks (button) or points at a bus (hover)
+      sel = showAll ? stopLines(view.stop) : [];
     }
     source('sel').setData(fc(sel));
     source('sel-stops').setData(fc(selStops));
@@ -1075,6 +1076,7 @@
         <button class="close-x" data-back aria-label="Close">✕</button>
         <div class="title-row">
           <div><h2>${escapeHtml(st[2])}</h2>${st[3] ? `<div class="op"><span class="code-tag">${escapeHtml(st[3])}</span></div>` : ''}</div></div>
+        ${passing.length ? `<button class="chip-btn" data-passing aria-pressed="${showAll}">${showAll ? 'Hide' : 'Show all'} passing routes</button>` : ''}
       </div>
       ${rows || '<div class="empty">No buses</div>'}`;
   }
@@ -1142,6 +1144,7 @@
   let fromPlace = null;
   function go(next, { fly = true } = {}) {
     peeked = peekedSvc = -1;
+    showAll = false;
     if (next.kind === 'service') fromStop = view.kind === 'stop' ? view.stop : view.kind === 'service' ? fromStop : -1;
     if (next.kind === 'stop') fromPlace = view.kind === 'place' ? view.place : view.kind === 'service' ? fromPlace : null;
     else if (next.kind !== 'service') fromPlace = null;
@@ -1255,7 +1258,7 @@
   clearBtn.addEventListener('click', () => { q.value = ''; render(); q.focus(); });
 
   body.addEventListener('click', (e) => {
-    const el = /** @type {HTMLElement | null} */ ((/** @type {HTMLElement} */ (e.target)).closest('[data-svc],[data-stop],[data-dir],[data-back],[data-place]'));
+    const el = /** @type {HTMLElement | null} */ ((/** @type {HTMLElement} */ (e.target)).closest('[data-svc],[data-stop],[data-dir],[data-back],[data-place],[data-passing]'));
     if (!el || !data) return;
     sound.play(el.dataset.back !== undefined ? 'close' : el.dataset.svc ? 'bus' : el.dataset.stop || el.dataset.place ? 'stop' : 'tick');
     if (el.dataset.back !== undefined) {
@@ -1264,6 +1267,13 @@
         : go({ kind: 'home' }, { fly: false });
     }
     if (el.dataset.place) return openPlace(places.hits[+el.dataset.place]);
+    if (el.dataset.passing !== undefined && view.kind === 'stop') {
+      showAll = !showAll;
+      render();
+      drawSelection();
+      if (showAll) fitCoords(data.stopServices[view.stop].flatMap((svc) => data.lines[svc].flat()), 15);
+      return;
+    }
     if (el.dataset.svc) {
       const svc = +el.dataset.svc, dir = +(el.dataset.dir ?? 0);
       // At a stop, like stop rows: 1st tap frames the bus's route, 2nd opens it
@@ -1303,7 +1313,9 @@
       if (color) tint(color);
       source('sel').setData(fc(svcIdx >= 0 ? data.lines[svcIdx].map((coords) => line(coords, { color })) : []));
     } else if (view.kind === 'stop') {
-      source('sel').setData(fc(stopLines(view.stop, svcIdx)));
+      // Hover shows just that bus; with "show all" on, the rest stay faded behind it
+      const lines = showAll ? stopLines(view.stop, svcIdx) : svcIdx >= 0 ? stopLines(view.stop, svcIdx).filter((f) => f.properties?.svc === svcIdx) : [];
+      source('sel').setData(fc(lines));
       for (const row of body.querySelectorAll('[data-svc]')) row.classList.toggle('hl', +(/** @type {HTMLElement} */ (row).dataset.svc ?? -1) === svcIdx);
     }
   }
