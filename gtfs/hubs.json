@@ -1,0 +1,20 @@
+{
+  "klang-valley": {
+    "names": { "Pasar Seni": "HAB Pasar Seni", "BSN Lebuh Ampang": "Masjid Jamek", "Hentian Kajang": "Hentian Kajang (Terminal Reko)", "Hentian Bandar Seksyen 14": "Hentian Bandar Seksyen 14" },
+    "join": [
+      ["BSN Lebuh Ampang", "LRT Masjid Jamek"],
+      ["Hentian Kajang", "Terminal Reko"],
+      ["Hentian Bandar Seksyen 14", "Wisma MBSA (Opp)"]
+    ]
+  },
+  "penang": { "names": { "Weld Quay": "Weld Quay Terminal" } },
+  "seremban": { "names": { "Terminal": "Terminal 1 Seremban" } },
+  "kuala-terengganu": {
+    "names": { "Terminal MBKT": "Terminal MBKT" },
+    "join": [["Terminal MBKT", "Hentian Bas Majlis Perbandaran Kuala Terengganu 1", "Hentian Bas Majlis Perbandaran Kuala Terengganu 2"]]
+  },
+  "kuching": {
+    "names": { "Open Air Market": "Saujana & Open Air Market" },
+    "join": [["Terminal Saujana Parking", "Terminal Saujana", "Open Air Market", "Open Air"]]
+  }
+}

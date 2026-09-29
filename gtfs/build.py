@@ -57,7 +57,7 @@ snap_cache: dict[str, list] = json.loads(SNAP_CACHE.read_text()) if SNAP_CACHE.e
 ACRONYMS = set("""BRT MRT LRT KTM KL KLCC KLIA KLIA2 PJ SS USJ TTDI HKL UKM UM UIA UITM USIM UPM UNITEN
 SK SMK SJK SJKC SJKT SRK SMA PPR PPA IPD IPK JKR TNB TM LHDN KWSP PKNS PKNP MPAJ MBPJ DBKL MBSA MPS
 AEON KPJ HSA JB KSL IOI MITC PD KK ICC ATM KFC UTC PPUM RTM MAHSA KTMB LPT
-IKEA CIQ BSI KSL JPJ HUKM UTM UTHM KPT BSN UTEM CIMB RHB HSBC OCBC UOB JKM PDRM UIAM IPG ILP KPM PKNJ MRSM SOGO UTAR LTSAS"""
+IKEA CIQ BSI MBKT KSL JPJ HUKM UTM UTHM KPT BSN UTEM CIMB RHB HSBC OCBC UOB JKM PDRM UIAM IPG ILP KPM PKNJ MRSM SOGO UTAR LTSAS"""
 .split())
 
 
@@ -209,7 +209,7 @@ def build_feed(feed: str, op_idx: int, stops: StopIndex):
         code = s.get("stop_code", "") if codes_ok else ""
         if code.upper().startswith("DUMMY"):  # placeholder codes in the feed, not on any pole
             code = ""
-        name = s["stop_name"]
+        name = re.sub(r"^\([A-Z]\d*\)\s*", "", s["stop_name"])  # "(M) KL2147 …" → "KL2147 …"
         # Rapid KL puts the stop code in the name: "KL1821 Pasar Seni"
         if m := re.fullmatch(r"([A-Z]{1,3}\d{2,5})\s+(.+)", name):
             code, name = code or m[1], m[2]
@@ -453,6 +453,65 @@ def service_area(pts, pad_m=2000):
     return [[[[round(x, 5), round(y, 5)] for x, y in ring.coords]]]  # GeoJSON MultiPolygon coordinates
 
 
+
+# ---------- Hubs: terminals whose bays/gates are separate GTFS stops ----------
+# Stops keep their own ids (GTFS-realtime reports the exact bay); a hub only groups them for display.
+
+HUB_ROUTES = 3   # a hub is where at least this many buses start or end
+HUB_M = 200      # bays of one terminal sit within this of each other
+HUBS_FILE = ROOT / "gtfs" / "hubs.json"  # per region: {"names": {auto: shown}, "join": [[stop names…]]}
+
+
+TERMINAL = re.compile(r"\b(hab|hub|hentian|terminal|sentral|stesen bas|medan kidd|mrt|lrt|ktm)\b")
+
+
+def hub_base(name: str) -> str:
+    """Terminal name without its bay/gate part: "Pasar Seni (Platform B1 - B2)" → "Pasar Seni"."""
+    n = re.sub(r"\s*\((Platform|Bay|Pintu|Opp)[^)]*\)", "", name, flags=re.I)
+    n = re.sub(r"\s+(Pintu|Platform|Bay)\s+[A-Z0-9]+$", "", n, flags=re.I)
+    n = re.sub(r"^Terminal [A-Z] ", "", n)  # "Terminal A Weld Quay"
+    n = re.sub(r"\s+(\d|One|Two)$", "", n)  # "Melaka Sentral 2", "Terminal One"
+    return n.strip()
+
+
+def hub_key(name: str) -> str:
+    return re.sub(r"\bsg\b", "sungai", hub_base(name).lower())
+
+
+def find_hubs(rid: str, stop_list: list, services: list) -> list[dict]:
+    over = json.loads(HUBS_FILE.read_text()).get(rid, {}) if HUBS_FILE.exists() else {}
+    ends: dict[int, set] = defaultdict(set)
+    for si, svc in enumerate(services):
+        for p in svc["patterns"]:
+            ends[p["stops"][0]].add(si)
+            ends[p["stops"][-1]].add(si)
+    near = lambda a, b: dist_m(stop_list[a][:2], stop_list[b][:2]) < HUB_M
+    # Forced joins: those stops are one hub no matter their names
+    by_name = defaultdict(list)
+    for i, s in enumerate(stop_list):
+        by_name[s[2]].append(i)
+    groups = [sorted({i for n in names for i in by_name[n]}) for names in over.get("join", [])]
+    taken = {i for g in groups for i in g}
+    # Auto: busiest terminus first; its hub takes nearby stops with the same terminal name
+    for core in sorted(ends, key=lambda i: -len(ends[i])):
+        if core in taken:
+            continue
+        key = hub_key(stop_list[core][2])
+        members = [i for i in range(len(stop_list)) if i not in taken and near(i, core) and hub_key(stop_list[i][2]) == key]
+        # A lone stop only counts if it reads like a terminal/station (not a busy mall or hotel stop)
+        if len(set().union(*(ends[i] for i in members))) >= HUB_ROUTES and (len(members) > 1 or TERMINAL.search(key)):
+            groups.append(members)
+            taken.update(members)
+    hubs = []
+    for g in groups:
+        core = max(g, key=lambda i: (len(ends[i]), -len(stop_list[i][2])))
+        auto = hub_base(stop_list[core][2])
+        hubs.append({"name": over.get("names", {}).get(auto, auto),
+                     "lng": round(sum(stop_list[i][0] for i in g) / len(g), 5),
+                     "lat": round(sum(stop_list[i][1] for i in g) / len(g), 5), "stops": g})
+    return sorted(hubs, key=lambda h: h["name"])
+
+
 def natural(s: str):
     return [int(x) if x.isdigit() else x for x in re.split(r"(\d+)", s)]
 
@@ -486,12 +545,15 @@ def main():
 
         lngs, lats = [s[0] for s in stop_list], [s[1] for s in stop_list]
         bounds = [min(lngs), min(lats), max(lngs), max(lats)]
-        region = {"id": rid, "name": rname, "bounds": bounds, "operators": operators, "stops": stop_list, "services": services}
+        hubs = find_hubs(rid, stop_list, services)
+        region = {"id": rid, "name": rname, "bounds": bounds, "operators": operators, "stops": stop_list, "services": services, "hubs": hubs}
         path = OUT / f"{rid}.json"
         path.write_text(json.dumps(region, separators=(",", ":"), ensure_ascii=False))
         index.append({"id": rid, "name": rname, "bounds": bounds, "operators": list(dict.fromkeys(o["name"] for o in operators)),
                       "services": len(services), "stops": len(stop_list), "area": service_area([(s[0], s[1]) for s in stop_list])})
-        print(f"{rid:14} {len(services):4} services {len(stop_list):5} stops {path.stat().st_size / 1024:7.0f} KB")
+        print(f"{rid:14} {len(services):4} services {len(stop_list):5} stops {len(hubs):3} hubs {path.stat().st_size / 1024:7.0f} KB")
+        for h in hubs:
+            print(f"    {h['name']:40} " + " | ".join(stop_list[i][2] for i in h["stops"])[:110])
 
     SNAP_CACHE.write_text(json.dumps(snap_cache, separators=(",", ":")))
     (OUT / "regions.json").write_text(json.dumps(index, separators=(",", ":"), ensure_ascii=False))
