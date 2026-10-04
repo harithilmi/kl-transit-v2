@@ -1565,10 +1565,11 @@
     for (const id of ['sel-casing', 'sel-arrows', 'stops', 'stops-icon']) map.setLayoutProperty(id, 'visibility', on ? 'none' : 'visible');
     map.setSky(on ? NIGHT.sky : { 'atmosphere-blend': 0 });
     // Phones: the tilted 3D view is the heaviest thing drawn, so fly at a lower resolution with solid buildings (no second pass)
-    if (isMobile()) {
-      map.setPixelRatio(on ? Math.min(devicePixelRatio, 1.25) : Math.min(devicePixelRatio, 2));
+    const sharp = Math.min(devicePixelRatio, 2);
+    if (on && isMobile()) {
+      map.setPixelRatio(Math.min(devicePixelRatio, 1.25));
       map.setPaintProperty('tour-buildings', 'fill-extrusion-opacity', 1);
-    }
+    } else if (!on && map.getPixelRatio() !== sharp) map.setPixelRatio(sharp); // whatever the width is now: the phone may have been turned
     if (!on) return;
     railOpacity(1); // rail lines in full colour: they are the transfers (the bus view fades them again after)
     /** @type {[layer: string, paint: Record<string, string | number>][]} */
@@ -1688,10 +1689,10 @@
       // busy loading the city), and sent on arrival the stop would pop in after the bus had passed
       let m = n;
       while (m < stops.length && stopAt[m] <= d + TOUR.ahead * tourRate) m++;
-      if (m !== dotted) {
+      if (m !== dotted || n !== shown) {
         dotted = m;
-        // The newest stop (the one the bus is at, or coming up to) wears the ring (`here`)
-        source('sel-stops').setData(fc(dots.slice(0, m).map((dot, k) => (k < m - 1 ? dot : { ...dot, properties: { ...dot.properties, here: true } }))));
+        // The stop the bus is at wears the ring (`here`)
+        source('sel-stops').setData(fc(dots.slice(0, m).map((dot, k) => (k !== n - 1 ? dot : { ...dot, properties: { ...dot.properties, here: true } }))));
       }
       if (n === shown) return;
       shown = n;
