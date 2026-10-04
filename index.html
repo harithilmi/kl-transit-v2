@@ -33,6 +33,7 @@
       -webkit-tap-highlight-color: transparent;
     }
     button, input, select { font: inherit; color: inherit; }
+    button, .tour, .panel { touch-action: manipulation; } /* quick repeated taps are taps, not a double-tap zoom */
     button { cursor: pointer; }
     #map { position: fixed; inset: 0; }
     .maplibregl-ctrl-bottom-left { left: calc(var(--panel-w) + 12px); }
@@ -66,7 +67,6 @@
       animation: slide-in 0.45s var(--ease-out) both;
     }
     @keyframes slide-in { from { transform: translateX(-16px); opacity: 0; } }
-    .handle { display: none; }
     .head { padding: 14px 14px 10px; display: grid; gap: 10px; border-bottom: 1px solid var(--line); }
     .brand { display: flex; align-items: center; gap: 10px; }
     .brand h1 { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -0.01em; }
@@ -231,51 +231,64 @@
     .loading[hidden] { display: none; }
 
     /* Flyover: the map goes dark and full-screen; only this bar stays */
-    body.touring .panel, body.touring .map-tools { opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+    body.touring .panel { opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+    /* Of the map buttons, only sound stays (a setting, not one of the bar's playback keys), dark like the bar */
+    body.touring .map-tools > :not(.sound-btn) { display: none; }
+    body.touring .map-tools .sound-btn { background: rgba(13, 20, 38, 0.9); border-color: rgba(255, 255, 255, 0.1); color: #dfe6f5; }
     .tour {
       position: fixed; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); translate: -50% 0; z-index: 3;
       display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px 12px; padding: 10px; border-radius: 16px;
       width: max-content; max-width: calc(100vw - 24px);
     }
+    /* Dark, like the map it sits on */
+    .tour.glass { background: rgba(13, 20, 38, 0.9); border-color: rgba(255, 255, 255, 0.1); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); color: #eef2fb; }
     .tour .keys { display: flex; gap: 4px; }
     .tour .keys .chip-btn { min-width: 34px; padding: 6px 10px; font-variant-numeric: tabular-nums; }
-    .tour .sound-btn, .tour .sound-btn[aria-pressed='true'] { display: grid; place-items: center; background: var(--chip); color: var(--ink-2); }
-    .tour .sound-btn svg { width: 15px; height: 15px; }
+    .tour .chip-btn { background: rgba(255, 255, 255, 0.1); color: #dfe6f5; }
     .tour[hidden] { display: none; }
     /* The bus at the head of the line: an arrow lying on the road. Slices stacked along Z give it thickness
        (preserve-3d: the map tilts the marker, the slices tilt with it) */
     .tour-bus { width: 34px; height: 46px; transform-style: preserve-3d; }
     .tour-bus svg { position: absolute; inset: 0; fill: #8fa3cc; }
     .tour-bus svg:last-child { fill: #fff; }
-    /* Fixed size, so the bar holds still from stop to stop: transfers get one row, the overflow fades out */
+    /* Fixed width, so the bar holds still from stop to stop: transfers get one row (none at a stop without any), the overflow fades out */
     .tour .main { width: min(340px, calc(100vw - 48px)); display: grid; gap: 4px; }
     #tour-change {
       display: flex; align-items: center; gap: 8px; height: 20px; overflow: hidden; white-space: nowrap;
       -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent);
     }
+    #tour-change:empty { display: none; }
     #tour-change > *, #tour-change .rail-list > * { flex: none; }
     #tour-change .rail-list { display: flex; gap: 8px; }
     #tour-change .others { margin: 0; flex-wrap: nowrap; }
     .tour .t { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .tour .s { color: var(--ink-3); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .tour .s { color: #8e9bb8; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
 
     /* ---------- Mobile: bottom sheet ---------- */
     @media (max-width: 800px) {
       :root { --panel-w: 0px; --sheet: 46vh; }
       .panel {
         top: auto; left: 0; right: 0; bottom: 0; width: auto; height: var(--sheet); border-radius: 18px 18px 0 0;
-        border-bottom: 0; transition: height 0.35s var(--ease-out); animation-name: sheet-in;
+        border-bottom: 0; animation-name: sheet-in;
         padding-bottom: env(safe-area-inset-bottom);
       }
       @keyframes sheet-in { from { transform: translateY(24px); opacity: 0; } }
-      .panel.expanded { height: 86vh; }
-      .panel.peek { height: 150px; }
-      .handle { display: block; border: 0; background: none; padding: 8px 0 0; width: 100%; }
-      .handle::before { content: ''; display: block; margin: 0 auto; width: 38px; height: 5px; border-radius: 3px; background: #cfcbc3; }
-      .head { padding-top: 6px; }
       .map-tools { top: max(12px, env(safe-area-inset-top)); }
+      .search input { font-size: 16px; } /* iOS zooms the page on focus below 16px */
       .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { bottom: calc(var(--sheet) - 8px); }
       .glass { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(255, 255, 255, 0.97); }
+      /* Flyover bar: a sheet across the bottom edge, the buttons in one full row of thumb-sized keys */
+      .tour {
+        left: 0; right: 0; bottom: 0; translate: none; width: auto; max-width: none; border-radius: 18px 18px 0 0; border-bottom: 0;
+        display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 12px;
+        padding: 14px 16px calc(12px + env(safe-area-inset-bottom));
+      }
+      .tour .main { width: auto; }
+      .tour .t { font-size: 16px; }
+      .tour .keys { grid-column: 1 / -1; gap: 6px; }
+      .tour .keys .chip-btn { flex: 1; height: 42px; padding: 0; border-radius: 12px; font-size: 15px; }
+      /* The map credit would hang mid-screen where the panel was: park it under the sound button for the flight */
+      body.touring .maplibregl-ctrl-bottom-right { bottom: auto; top: calc(max(12px, env(safe-area-inset-top)) + 46px); }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -299,7 +312,6 @@
   </div>
 
   <aside class="panel glass" id="panel">
-    <button class="handle" id="handle" aria-label="Resize panel"></button>
     <div class="head">
       <div class="brand">
         <h1>KL <span>Transit</span></h1>
@@ -326,10 +338,7 @@
       <button class="chip-btn" data-tour="pause" aria-label="Pause" title="Pause (space)">❚❚</button>
       <button class="chip-btn" data-tour="next" aria-label="Next stop" title="Next stop (→)">›</button>
       <button class="chip-btn" data-tour="rate" aria-label="Speed" title="Speed">1×</button>
-      <button class="chip-btn sound-btn" aria-label="Sound" title="Sound" aria-pressed="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path class="wave" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/><path class="mute" d="m16 9 6 6m0-6-6 6"/></svg>
-      </button>
-      <button class="chip-btn" data-tour="end" title="Stop (Esc)">Stop</button>
+      <button class="chip-btn" data-tour="end" title="End flyover (Esc)">End</button>
     </div>
   </div>
   <div class="loading glass" id="loading" hidden>Loading…</div>
@@ -955,12 +964,18 @@
     drawBuses();
   }
 
+  /** Padding for fitBounds: flyTo/easeTo leave theirs on the map and fitBounds adds to it, so pass only the difference */
+  function fitPad() {
+    const want = pad(), has = map.getPadding();
+    return { top: want.top - (has.top ?? 0), bottom: want.bottom - (has.bottom ?? 0), left: want.left - (has.left ?? 0), right: want.right - (has.right ?? 0) };
+  }
+
   /** @param {[number, number][]} coords @param {number} maxZoom @param {import('maplibre-gl').FitBoundsOptions} opts */
   function fitCoords(coords, maxZoom = 16, opts = {}) {
     if (!coords.length) return;
     const b = new maplibregl.LngLatBounds(coords[0], coords[0]);
     for (const c of coords) b.extend(c);
-    map.fitBounds(b, { padding: pad(), maxZoom, duration: 700, ...opts });
+    map.fitBounds(b, { padding: fitPad(), maxZoom, duration: 700, ...opts });
   }
 
   // ---------- Place search (local Nominatim) ----------
@@ -1220,7 +1235,7 @@
         ${runningNote(p).startsWith('Ended') ? `<div class="note"><span class="off ended">Ended for today</span></div>` : ''}
         <div class="toggle-row">
           <div class="note">${p.stops.length} stops${p.mins ? ` · ~${p.mins[p.mins.length - 1]} min end to end` : ''}</div>
-          <button class="chip-btn" data-fly>▶ Fly along</button>
+          <button class="chip-btn" data-fly>▶\uFE0E Fly along</button>
         </div>
       </div>
       <ol class="timeline" style="--c:${color}">${rows}</ol>`;
@@ -1331,16 +1346,13 @@
     if (!data || !fly) return;
     if (view.kind === 'service') {
       fitCoords(data.lines[view.svc][view.dir]);
-      if (isMobile()) setSheet('');
     } else if (view.kind === 'stop') {
       const s = data.region.stops[view.stop];
       map.flyTo({ center: [s[0], s[1]], zoom: Math.max(map.getZoom(), 15.5), padding: pad(), duration: 700 });
-      if (isMobile()) setSheet('');
     } else if (view.kind === 'place') {
       const { place } = view, { stops } = data.region;
       // Frame the place with the stops listed (or the lone nearest one)
       fitCoords([[place.lng, place.lat], ...nearStops(place).map(({ i }) => /** @type {[number, number]} */ ([stops[i][0], stops[i][1]]))], 16.5);
-      if (isMobile()) setSheet('');
     }
   }
 
@@ -1358,7 +1370,7 @@
     document.documentElement.style.setProperty('--accent', region.operators[0].color);
     drawRegion();
     syncLive();
-    if (fit && next.kind === 'home') map.fitBounds(region.bounds, { padding: pad(), duration: 0 });
+    if (fit && next.kind === 'home') map.fitBounds(region.bounds, { padding: fitPad(), duration: 0 });
     go(next, { fly: next.kind !== 'home' });
   }
 
@@ -1522,6 +1534,7 @@
     pull: 0.6, // zoom levels the camera pulls back each time the speed doubles
     lead: 1600, // ms to swoop down to the first stop
     look: 400, // metres ahead the camera faces
+    ahead: 120, // metres ahead a stop's dot is put on the map (× the speed setting)
     nose: 25, // metres of road ahead the bus marker points along
     // Each stop: `zone` metres either side where the bus brakes and pulls away, down to `crawl` × full speed at the stop
     halt: { zone: 50, crawl: 0.15 },
@@ -1551,6 +1564,12 @@
     for (const id of ['tour-buildings', 'tour-glow', 'tour-rail-ring', 'tour-rail-label']) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
     for (const id of ['sel-casing', 'sel-arrows', 'stops', 'stops-icon']) map.setLayoutProperty(id, 'visibility', on ? 'none' : 'visible');
     map.setSky(on ? NIGHT.sky : { 'atmosphere-blend': 0 });
+    // Phones: the tilted 3D view is the heaviest thing drawn, so fly at a lower resolution with solid buildings (no second pass)
+    const sharp = Math.min(devicePixelRatio, 2);
+    if (on && isMobile()) {
+      map.setPixelRatio(Math.min(devicePixelRatio, 1.25));
+      map.setPaintProperty('tour-buildings', 'fill-extrusion-opacity', 1);
+    } else if (!on && map.getPixelRatio() !== sharp) map.setPixelRatio(sharp); // whatever the width is now: the phone may have been turned
     if (!on) return;
     railOpacity(1); // rail lines in full colour: they are the transfers (the bus view fades them again after)
     /** @type {[layer: string, paint: Record<string, string | number>][]} */
@@ -1654,17 +1673,29 @@
     };
 
     /** Draw the line up to `t` (0–1) of its length */
+    let drawn = -1;
     const reveal = (/** @type {number} */ t) => {
-      for (const id of ['sel-line', 'tour-glow']) map.setPaintProperty(id, 'line-gradient', ['step', ['line-progress'], color, t, 'rgba(0, 0, 0, 0)']);
+      // Each change redraws the gradient for every tile the line is in, so skip the ones too small to see (the bus hides the end)
+      if (t === drawn || (t < 1 && Math.abs(t - drawn) * length < 2)) return;
+      drawn = t;
+      // A steep `interpolate`, not `step`: a step gradient is redrawn at up to the largest texture size per tile, far too slow every frame
+      for (const id of ['sel-line', 'tour-glow']) map.setPaintProperty(id, 'line-gradient', ['interpolate', ['linear'], ['line-progress'], t, color, t + 1e-6, 'rgba(0, 0, 0, 0)']);
     };
-    let shown = 0;
+    let shown = 0, dotted = 0;
     const showStops = (/** @type {number} */ d) => {
       let n = 0;
       while (n < stops.length && stopAt[n] <= d) n++;
+      // The dots go on the map a little before the bus gets there: map data takes a few frames to land (more on a phone,
+      // busy loading the city), and sent on arrival the stop would pop in after the bus had passed
+      let m = n;
+      while (m < stops.length && stopAt[m] <= d + TOUR.ahead * tourRate) m++;
+      if (m !== dotted || n !== shown) {
+        dotted = m;
+        // The stop the bus is at wears the ring (`here`)
+        source('sel-stops').setData(fc(dots.slice(0, m).map((dot, k) => (k !== n - 1 ? dot : { ...dot, properties: { ...dot.properties, here: true } }))));
+      }
       if (n === shown) return;
       shown = n;
-      // The stop the bus is at wears the ring (`here`)
-      source('sel-stops').setData(fc(dots.slice(0, shown).map((dot, k) => (k < shown - 1 ? dot : { ...dot, properties: { ...dot.properties, here: true } }))));
       const s = stops[shown - 1];
       sound.play(dots[shown - 1].properties?.rail ? 'transfer' : 'arrive');
       const mins = pattern.mins?.[shown - 1];
@@ -1717,14 +1748,15 @@
     };
     /** @type {TourKeys} */
     const keys = {
-      pause() { paused = !paused; label('pause', paused ? '▶' : '❚❚'); },
+      pause() { paused = !paused; label('pause', paused ? '▶\uFE0E' : '❚❚'); },
       prev: () => seek(shown - 2),
       next: () => seek(shown),
       rate() { tourRate = tourRate >= 4 ? 1 : tourRate * 2; label('rate', `${tourRate}×`); },
     };
-    // The bus sits low on screen, so most of the view is the road ahead
+    // The bus sits low on screen, so most of the view is the road ahead. On phones the bar covers the bottom: measure above it
+    const under = isMobile() ? hud.offsetHeight : 0;
     map.easeTo({ center: coords[0], zoom: TOUR.zoom, pitch: TOUR.pitch, bearing, duration: TOUR.lead,
-      padding: { top: innerHeight * 0.15, bottom: 0, left: 0, right: 0 } });
+      padding: { top: (innerHeight - under) * 0.15, bottom: under, left: 0, right: 0 } });
 
     const step = (/** @type {number} */ now) => {
       if (!tour) return;
@@ -1818,7 +1850,6 @@
     searchPlaces(q.value.trim().toLowerCase()); // first, so the list can say "Searching places…"
     if (view.kind !== 'home') go({ kind: 'home' }, { fly: false }); else render();
   });
-  q.addEventListener('focus', () => { if (isMobile()) setSheet('expanded'); });
   // Enter opens the top result · Esc clears, then leaves the box
   q.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') (/** @type {HTMLElement | null} */ (body.querySelector('.row')))?.click();
@@ -1984,11 +2015,10 @@
   map.on('movestart', () => tip.classList.remove('show'));
   map.getCanvas().addEventListener('mouseleave', () => { tip.classList.remove('show'); hoverArea(''); });
 
-  // Two sound buttons (map tools, flyover bar): one setting, both show it
-  const soundBtns = document.querySelectorAll('.sound-btn');
-  const showSound = (/** @type {boolean} */ on) => { for (const b of soundBtns) b.setAttribute('aria-pressed', String(on)); };
+  const soundBtn = /** @type {HTMLElement} */ (document.querySelector('.sound-btn'));
+  const showSound = (/** @type {boolean} */ on) => soundBtn.setAttribute('aria-pressed', String(on));
   showSound(sound.on);
-  for (const b of soundBtns) b.addEventListener('click', () => showSound(sound.toggle()));
+  soundBtn.addEventListener('click', () => showSound(sound.toggle()));
 
   $('zoom-in').addEventListener('click', () => map.zoomIn());
   $('zoom-out').addEventListener('click', () => map.zoomOut());
@@ -2001,15 +2031,6 @@
       if (inside && inside.id !== regionId) await setRegion(inside.id, { kind: 'home' }, false);
       map.flyTo({ center: here, zoom: 16, padding: pad(), duration: 900 });
     }, () => { loading.textContent = 'Location unavailable'; loading.hidden = false; setTimeout(() => { loading.hidden = true; loading.textContent = 'Loading…'; }, 2000); });
-  });
-
-  // Mobile sheet: tap the handle to cycle sizes
-  function setSheet(/** @type {'' | 'expanded' | 'peek'} */ size) {
-    panel.classList.toggle('expanded', size === 'expanded');
-    panel.classList.toggle('peek', size === 'peek');
-  }
-  $('handle').addEventListener('click', () => {
-    setSheet(panel.classList.contains('expanded') ? 'peek' : panel.classList.contains('peek') ? '' : 'expanded');
   });
 
   // replaceState doesn't fire this, so it only runs for pasted/edited URLs
