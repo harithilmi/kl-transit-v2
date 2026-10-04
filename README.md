@@ -22,6 +22,7 @@ The build script contains Kangar and Alor Setar. At this time, the feeds for the
 ## Functions
 
 - **Buses:** Each route has its own color. The route shows the two directions, the "via" name, and all the stops. Each stop in the list shows the other buses and the rail lines near it (KJ, KG, KTM).
+- **Flyover:** Push "Fly along" on a bus. The map becomes dark and 3D, and the camera follows the bus along the route. The stops with a rail line near them get a ring and the line code. A bus with two directions flies there and back. Space pauses, the arrow keys go to the previous or the next stop, and the speed button changes between 1×, 2×, and 4×. Push "Stop" or Esc to go back. A link that ends in `/fly` starts the flyover.
 - **Stops:** A stop shows all the buses that stop there and the time between the buses. Put the pointer on a bus to see its line. To see all the lines, push "Show all passing routes".
 - **Map:** A stop is a dot. When you zoom in, the map shows the stop code and the stop name. The first click on a stop zooms in. The second click opens the stop.
 - **Rail and ferry layer:** The map shows the LRT, MRT, Monorail, BRT, KTM Komuter, KLIA lines, ETS, the domestic ferries, and the Kuching penambang boats. Where lines use the same track, the map shows them as parallel lines. This layer gives information only. A click on this layer does nothing.

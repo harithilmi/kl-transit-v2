@@ -330,6 +330,7 @@ def build_feed(feed: str, op_idx: int, stops: StopIndex):
                 long = ""
             color = r.get("route_color", "")
             svc = services[rid] = {
+                "id": rid,  # GTFS route_id: live bus positions name their route by it
                 "no": no,
                 "name": long,
                 "op": op_idx,

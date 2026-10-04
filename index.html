@@ -53,8 +53,8 @@
     }
     .round:active { transform: scale(0.94); }
     .round svg { width: 20px; height: 20px; }
-    #sound .mute, #sound[aria-pressed='true'] .wave { display: inline; }
-    #sound .wave, #sound[aria-pressed='true'] .mute { display: none; }
+    .sound-btn .mute, .sound-btn[aria-pressed='true'] .wave { display: inline; }
+    .sound-btn .wave, .sound-btn[aria-pressed='true'] .mute { display: none; }
     .zoom-pair { display: grid; border-radius: 12px; overflow: hidden; }
     .zoom-pair .round { border-radius: 0; background: none; box-shadow: none; font-size: 20px; font-weight: 500; }
     .zoom-pair .round + .round { border-top: 1px solid var(--line); }
@@ -230,6 +230,35 @@
     .loading { position: fixed; left: 50%; top: 18px; translate: -50% 0; z-index: 4; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; color: var(--ink-2); }
     .loading[hidden] { display: none; }
 
+    /* Flyover: the map goes dark and full-screen; only this bar stays */
+    body.touring .panel, body.touring .map-tools { opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+    .tour {
+      position: fixed; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); translate: -50% 0; z-index: 3;
+      display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px 12px; padding: 10px; border-radius: 16px;
+      width: max-content; max-width: calc(100vw - 24px);
+    }
+    .tour .keys { display: flex; gap: 4px; }
+    .tour .keys .chip-btn { min-width: 34px; padding: 6px 10px; font-variant-numeric: tabular-nums; }
+    .tour .sound-btn, .tour .sound-btn[aria-pressed='true'] { display: grid; place-items: center; background: var(--chip); color: var(--ink-2); }
+    .tour .sound-btn svg { width: 15px; height: 15px; }
+    .tour[hidden] { display: none; }
+    /* The bus at the head of the line: an arrow lying on the road. Slices stacked along Z give it thickness
+       (preserve-3d: the map tilts the marker, the slices tilt with it) */
+    .tour-bus { width: 34px; height: 46px; transform-style: preserve-3d; }
+    .tour-bus svg { position: absolute; inset: 0; fill: #8fa3cc; }
+    .tour-bus svg:last-child { fill: #fff; }
+    /* Fixed size, so the bar holds still from stop to stop: transfers get one row, the overflow fades out */
+    .tour .main { width: min(340px, calc(100vw - 48px)); display: grid; gap: 4px; }
+    #tour-change {
+      display: flex; align-items: center; gap: 8px; height: 20px; overflow: hidden; white-space: nowrap;
+      -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent);
+    }
+    #tour-change > *, #tour-change .rail-list > * { flex: none; }
+    #tour-change .rail-list { display: flex; gap: 8px; }
+    #tour-change .others { margin: 0; flex-wrap: nowrap; }
+    .tour .t { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tour .s { color: var(--ink-3); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
     /* ---------- Mobile: bottom sheet ---------- */
     @media (max-width: 800px) {
       :root { --panel-w: 0px; --sheet: 46vh; }
@@ -261,7 +290,7 @@
       <button class="round" id="zoom-in" aria-label="Zoom in">+</button>
       <button class="round" id="zoom-out" aria-label="Zoom out">−</button>
     </div>
-    <button class="round glass" id="sound" aria-label="Sound" aria-pressed="true">
+    <button class="round glass sound-btn" aria-label="Sound" aria-pressed="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path class="wave" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/><path class="mute" d="m16 9 6 6m0-6-6 6"/></svg>
     </button>
     <button class="round glass" id="locate" aria-label="Show my location">
@@ -289,6 +318,20 @@
   </aside>
 
   <div class="tip" id="tip"></div>
+  <div class="tour glass" id="tour" hidden>
+    <span id="tour-badge"></span>
+    <div class="main"><div class="t" id="tour-stop"></div><div class="s" id="tour-count"></div><div id="tour-change"></div></div>
+    <div class="keys">
+      <button class="chip-btn" data-tour="prev" aria-label="Previous stop" title="Previous stop (←)">‹</button>
+      <button class="chip-btn" data-tour="pause" aria-label="Pause" title="Pause (space)">❚❚</button>
+      <button class="chip-btn" data-tour="next" aria-label="Next stop" title="Next stop (→)">›</button>
+      <button class="chip-btn" data-tour="rate" aria-label="Speed" title="Speed">1×</button>
+      <button class="chip-btn sound-btn" aria-label="Sound" title="Sound" aria-pressed="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path class="wave" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/><path class="mute" d="m16 9 6 6m0-6-6 6"/></svg>
+      </button>
+      <button class="chip-btn" data-tour="end" title="Stop (Esc)">Stop</button>
+    </div>
+  </div>
   <div class="loading glass" id="loading" hidden>Loading…</div>
 
 <script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
@@ -298,7 +341,7 @@
   /**
    * @typedef {[lng: number, lat: number, name: string, code: string]} Stop
    * @typedef {{ to: string, loop: boolean, stops: number[], mins: number[] | null, shape: string, trips: number, first: string | null, last: string | null }} Pattern
-   * @typedef {{ no: string, name: string, op: number, color: string | null, patterns: Pattern[] }} Service
+   * @typedef {{ id: string, no: string, name: string, op: number, color: string | null, patterns: Pattern[] }} Service
    * @typedef {{ id: string, name: string, color: string }} Operator
    * @typedef {{ id: string, name: string, bounds: [number, number, number, number], operators: Operator[], stops: Stop[], services: Service[] }} Region
    * @typedef {{ id: string, name: string, bounds: [number, number, number, number], operators: string[], services: number, stops: number, area: GeoJSON.Position[][][] }} RegionMeta
@@ -325,11 +368,11 @@
     /** @type {AudioContext | null} */
     let ctx = null;
     let on = localStorage.getItem('sound') !== 'off';
-    /** One soft sine blip: quick attack, exponential decay */
-    function blip(/** @type {number} */ freq, /** @type {number} */ at, /** @type {number} */ dur, gain = 0.05, endFreq = freq) {
+    /** One soft blip: quick attack, exponential decay. Sine by default; square is the 8-bit game sound */
+    function blip(/** @type {number} */ freq, /** @type {number} */ at, /** @type {number} */ dur, gain = 0.05, endFreq = freq, /** @type {OscillatorType} */ type = 'sine') {
       if (!ctx) return;
       const t = ctx.currentTime + at, o = ctx.createOscillator(), g = ctx.createGain();
-      o.type = 'sine';
+      o.type = type;
       o.frequency.setValueAtTime(freq, t);
       o.frequency.exponentialRampToValueAtTime(endFreq, t + dur);
       g.gain.setValueAtTime(0.0001, t);
@@ -345,6 +388,9 @@
       close: () => blip(620, 0, 0.1, 0.04, 440),
       tick: () => blip(1400, 0, 0.04, 0.025),
       city: () => { blip(523, 0, 0.12, 0.04); blip(784, 0.08, 0.16, 0.04); },
+      // Flyover, 8-bit style: a coin at each stop (B5 flicks up to a ringing E6); a 1-up run where you change to rail
+      arrive: () => { blip(988, 0, 0.08, 0.025, 988, 'square'); blip(1319, 0.08, 0.45, 0.025, 1319, 'square'); },
+      transfer: () => [659, 784, 1319, 1047, 1175, 1568].forEach((f, i) => blip(f, i * 0.11, i < 5 ? 0.11 : 0.3, 0.025, f, 'square')),
     };
     return {
       get on() { return on; },
@@ -464,6 +510,7 @@
     dragRotate: false,
     pitchWithRotate: false,
     touchPitch: false,
+    maxPitch: 70, // only the flyover tilts this far
   });
   map.touchZoomRotate.disableRotation();
 
@@ -527,6 +574,17 @@
     return g.getImageData(0, 0, w, h);
   })();
 
+  /** Live bus marker: a dot with a nose pointing up (rotated to the bus's heading), SDF so it takes the route colour */
+  const busIcon = (() => {
+    const size = 44, c = document.createElement('canvas');
+    c.width = c.height = size;
+    const g = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
+    g.fillStyle = '#000';
+    g.beginPath(); g.arc(22, 25, 12, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.moveTo(22, 3); g.lineTo(32, 18); g.lineTo(12, 18); g.closePath(); g.fill();
+    return g.getImageData(0, 0, size, size);
+  })();
+
   /** @param {GeoJSON.Feature[]} features */
   const fc = (features) => /** @type {GeoJSON.FeatureCollection} */ ({ type: 'FeatureCollection', features });
   const source = (/** @type {string} */ id) => /** @type {import('maplibre-gl').GeoJSONSource} */ (map.getSource(id));
@@ -545,6 +603,16 @@
       layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'], 'text-size': 11, 'text-max-width': 8, 'text-padding': 4 },
       paint: { 'text-color': '#8b8680', 'text-halo-color': '#f4f2ee', 'text-halo-width': 1.4 },
     });
+
+    // Flyover only (hidden until then): 3D buildings under the map's labels, taller = brighter
+    map.addLayer({ id: 'tour-buildings', type: 'fill-extrusion', source: 'openmaptiles', 'source-layer': 'building', minzoom: 13,
+      layout: { visibility: 'none' },
+      paint: {
+        'fill-extrusion-color': ['interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 0], 0, '#15264d', 60, '#2a5cc0', 250, '#6aa5ff'],
+        'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 0],
+        'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+        'fill-extrusion-opacity': 0.8,
+      } }, map.getStyle().layers.find((l) => l.type === 'symbol')?.id);
 
     map.addImage('route-arrow', arrowIcon, { sdf: true, pixelRatio: 2 });
     const round = /** @type {const} */ ({ 'line-cap': 'round', 'line-join': 'round' });
@@ -653,6 +721,9 @@
       16, ['+', ['case', thin, 3.5, 6], extra],
       20, ['+', ['case', thin, 6, 11], extra]];
     const offset = ['interpolate', ['linear'], ['zoom'], 12, 0, 16, -3, 20, -8];
+    // Flyover only: a soft glow under the line as it draws itself
+    map.addLayer({ id: 'tour-glow', type: 'line', source: 'sel', layout: { ...round, visibility: 'none' },
+      paint: { 'line-gradient': gradient(STOP), 'line-width': routeWidth(14), 'line-blur': 12, 'line-offset': offset, 'line-opacity': 0.55 } });
     map.addLayer({ id: 'sel-casing', type: 'line', source: 'sel', layout: round,
       paint: { 'line-color': '#ffffff', 'line-width': routeWidth(3), 'line-offset': offset,
         'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, ['case', ['boolean', ['get', 'dim'], false], 0.4, 0.9], 16, ['case', ['boolean', ['get', 'dim'], false], 0.3, 0.6]] } });
@@ -702,6 +773,16 @@
       },
       paint: { 'text-color': '#2b2f38', 'text-halo-color': 'rgba(255,255,255,0.95)', 'text-halo-width': 2, 'text-halo-blur': 0.5 } });
 
+    // Flyover only: a pulsing ring, flat on the ground, round the stop the bus is at (white) and, for good, round each stop
+    // where you change to rail (the line's colour, with its code)
+    map.addLayer({ id: 'tour-rail-ring', type: 'circle', source: 'sel-stops', filter: ['any', ['has', 'rail'], ['has', 'here']], layout: { visibility: 'none' },
+      paint: { 'circle-radius': 24, 'circle-color': ['get', 'ring'], 'circle-opacity': 0.25, 'circle-stroke-color': ['get', 'ring'], 'circle-stroke-width': 4,
+        'circle-pitch-alignment': 'map' } }, 'sel-stops-dot');
+    map.addLayer({ id: 'tour-rail-label', type: 'symbol', source: 'sel-stops', filter: ['has', 'rail'],
+      layout: { visibility: 'none', 'text-field': ['get', 'rail'], 'text-font': ['Noto Sans Bold'], 'text-size': 13,
+        'text-anchor': 'bottom', 'text-offset': [0, -1.5], 'text-allow-overlap': true, 'text-ignore-placement': true },
+      paint: { 'text-color': ['get', 'railInk'], 'text-halo-color': ['get', 'railColor'], 'text-halo-width': 3 } });
+
     // Stop hovered in the sidebar: big ring + name, over everything
     map.addSource('hover-stop', { type: 'geojson', data: fc([]) });
     map.addLayer({ id: 'hover-stop', type: 'circle', source: 'hover-stop',
@@ -739,6 +820,20 @@
       layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Bold'], 'text-size': 13, 'text-anchor': 'top', 'text-offset': [0, 1],
         'text-max-width': 12, 'text-allow-overlap': true, 'text-ignore-placement': true },
       paint: { 'text-color': PLACE, 'text-halo-color': '#ffffff', 'text-halo-width': 2 } });
+
+    // Live buses, on top of everything: marker turned to the heading, route number from street level
+    map.addImage('live-bus', busIcon, { sdf: true, pixelRatio: 2 });
+    map.addSource('buses', { type: 'geojson', data: fc([]) });
+    map.addLayer({ id: 'buses', type: 'symbol', source: 'buses',
+      layout: {
+        'icon-image': 'live-bus', 'icon-size': ['interpolate', ['linear'], ['zoom'], 10, 0.55, 14, 1, 17, 1.3],
+        'icon-rotate': ['get', 'bearing'], 'icon-rotation-alignment': 'map',
+        'icon-allow-overlap': true, 'icon-ignore-placement': true,
+        'text-field': ['step', ['zoom'], '', 13, ['get', 'no']], 'text-font': ['Noto Sans Bold'], 'text-size': 11,
+        'text-offset': [0, 1.3], 'text-anchor': 'top', 'text-optional': true, 'text-allow-overlap': false,
+      },
+      paint: { 'icon-color': ['get', 'color'], 'icon-halo-color': '#ffffff', 'icon-halo-width': 2,
+        'text-color': ['get', 'color'], 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 } });
 
     document.querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show');
   });
@@ -857,14 +952,15 @@
     railOpacity(faded ? 0.35 : 1);
     onRoute = view.kind === 'service' ? region.services[view.svc].patterns[view.dir].stops : [];
     hideStops();
+    drawBuses();
   }
 
-  /** @param {[number, number][]} coords */
-  function fitCoords(coords, maxZoom = 16) {
+  /** @param {[number, number][]} coords @param {number} maxZoom @param {import('maplibre-gl').FitBoundsOptions} opts */
+  function fitCoords(coords, maxZoom = 16, opts = {}) {
     if (!coords.length) return;
     const b = new maplibregl.LngLatBounds(coords[0], coords[0]);
     for (const c of coords) b.extend(c);
-    map.fitBounds(b, { padding: pad(), maxZoom, duration: 700 });
+    map.fitBounds(b, { padding: pad(), maxZoom, duration: 700, ...opts });
   }
 
   // ---------- Place search (local Nominatim) ----------
@@ -980,9 +1076,10 @@
     return 0.299 * r + 0.587 * g + 0.114 * b > 170 ? '#1d1d1f' : '#fff';
   };
 
+  const KTM = '#1c4c9c';
   /** Komuter lines share one chip, so it gets KTM's brand blue rather than one line's colour */
   const chipStyle = (/** @type {Transit['lines'][number]} */ l) => {
-    const c = l.mode === 'komuter' ? '#1c4c9c' : l.color;
+    const c = l.mode === 'komuter' ? KTM : l.color;
     return `--c:${c};color:${inkOn(c)}`;
   };
 
@@ -1121,7 +1218,10 @@
           <div class="fact"><b>${hw ? `~${hw} min` : '—'}</b><span>Every</span></div>
         </div>
         ${runningNote(p).startsWith('Ended') ? `<div class="note"><span class="off ended">Ended for today</span></div>` : ''}
-        <div class="note">${p.stops.length} stops${p.mins ? ` · ~${p.mins[p.mins.length - 1]} min end to end` : ''}</div>
+        <div class="toggle-row">
+          <div class="note">${p.stops.length} stops${p.mins ? ` · ~${p.mins[p.mins.length - 1]} min end to end` : ''}</div>
+          <button class="chip-btn" data-fly>▶ Fly along</button>
+        </div>
       </div>
       <ol class="timeline" style="--c:${color}">${rows}</ol>`;
   }
@@ -1199,7 +1299,7 @@
 
   function writeHash() {
     if (!data) return;
-    const tail = view.kind === 'service' ? `/bus/${encodeURIComponent(data.keys[view.svc])}${view.dir ? '/2' : ''}`
+    const tail = view.kind === 'service' ? `/bus/${encodeURIComponent(data.keys[view.svc])}${view.dir ? '/2' : ''}${tour ? '/fly' : ''}`
       : view.kind === 'stop' ? `/stop/${encodeURIComponent(data.stopKeys[view.stop])}`
       : view.kind === 'place' ? `/place/${view.place.lat.toFixed(5)},${view.place.lng.toFixed(5)}/${encodeURIComponent(view.place.name)}` : '';
     history.replaceState(null, '', `#/${regionId}${tail}`);
@@ -1218,6 +1318,7 @@
   /** @type {Place | null} place a stop was opened from (kept through its buses), so ✕ returns there */
   let fromPlace = null;
   function go(next, { fly = true } = {}) {
+    stopTour();
     peeked = peekedSvc = -1;
     showAll = false;
     if (next.kind === 'service') fromStop = view.kind === 'stop' ? view.stop : view.kind === 'service' ? fromStop : -1;
@@ -1244,6 +1345,7 @@
   }
 
   async function setRegion(/** @type {string} */ id, /** @type {View} */ next = { kind: 'home' }, fit = true) {
+    stopTour();
     regionId = id;
     regionBtn.textContent = regions.find((r) => r.id === id)?.name ?? '';
     for (const b of cityMenu.querySelectorAll('[data-city]')) b.setAttribute('aria-selected', String((/** @type {HTMLElement} */ (b)).dataset.city === id));
@@ -1255,6 +1357,7 @@
     data = index(region);
     document.documentElement.style.setProperty('--accent', region.operators[0].color);
     drawRegion();
+    syncLive();
     if (fit && next.kind === 'home') map.fitBounds(region.bounds, { padding: pad(), duration: 0 });
     go(next, { fly: next.kind !== 'home' });
   }
@@ -1263,7 +1366,7 @@
     const [, id, kind, key, dir] = location.hash.split('/');
     const meta = regions.find((r) => r.id === id) ?? regions[0];
     // `dir` is the bus direction, or a place's name in #/<city>/place/<lat>,<lng>/<name>
-    return { id: meta.id, kind, key: key ? decodeURIComponent(key) : '', dir: dir === '2' ? 1 : 0, name: dir ? decodeURIComponent(dir) : '' };
+    return { id: meta.id, kind, key: key ? decodeURIComponent(key) : '', dir: dir === '2' ? 1 : 0, name: dir ? decodeURIComponent(dir) : '', fly: location.hash.endsWith('/fly') };
   }
 
   /** Resolve a hash key once the region is loaded */
@@ -1280,7 +1383,405 @@
       : h.kind === 'place' && Number.isFinite(lat) && Number.isFinite(lng) ? { kind: 'place', place: { name: h.name || 'Dropped pin', detail: '', lat, lng } }
       : { kind: 'home' };
     await setRegion(h.id, next);
+    if (h.fly) startTour();
   }
+
+  // ---------- Live buses (data.gov.my GTFS Realtime) ----------
+
+  // Only Rapid KL publishes positions we can match to routes; the feed refreshes every 30 s
+  const LIVE = {
+    region: 'klang-valley',
+    feeds: ['rapid-bus-kl', 'rapid-bus-mrtfeeder'],
+    url: (/** @type {string} */ feed) => `https://api.data.gov.my/gtfs-realtime/vehicle-position/prasarana/?category=${feed}`,
+    every: 30_000,
+    staleAfter: 120, // seconds: older pings are parked or offline buses
+  };
+
+  /** @typedef {{ no: number, num: number, bytes: Uint8Array }} Field */
+  /** Minimal protobuf reader (saves a decoder library): one entry per field, `num` for numbers, `bytes` for strings/sub-messages */
+  function* fields(/** @type {Uint8Array} */ buf) {
+    const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+    const none = new Uint8Array(0);
+    let i = 0;
+    const varint = () => { let v = 0, m = 1, b; do { b = buf[i++]; v += (b & 127) * m; m *= 128; } while (b & 128); return v; };
+    while (i < buf.length) {
+      const tag = varint(), wire = tag & 7, no = tag >>> 3;
+      if (wire === 0) yield /** @type {Field} */ ({ no, num: varint(), bytes: none });
+      else if (wire === 2) { const n = varint(); yield /** @type {Field} */ ({ no, num: 0, bytes: buf.subarray(i, i + n) }); i += n; }
+      else if (wire === 5) { yield /** @type {Field} */ ({ no, num: dv.getFloat32(i, true), bytes: none }); i += 4; }
+      else if (wire === 1) i += 8;
+      else return; // groups: not used by GTFS Realtime
+    }
+  }
+
+  /** FeedMessage → the fields we draw. Numbers below are the field ids in gtfs-realtime.proto */
+  function parseVehicles(/** @type {Uint8Array} */ feed) {
+    const text = new TextDecoder();
+    const out = [];
+    for (const entity of fields(feed)) {
+      if (entity.no !== 2) continue;
+      for (const vehicle of fields(entity.bytes)) {
+        if (vehicle.no !== 4) continue;
+        const bus = { id: '', route: '', lat: 0, lng: 0, bearing: 0, speed: 0, time: 0 };
+        for (const f of fields(vehicle.bytes)) {
+          if (f.no === 1) { for (const t of fields(f.bytes)) if (t.no === 5) bus.route = text.decode(t.bytes); }
+          else if (f.no === 2) {
+            for (const p of fields(f.bytes)) {
+              if (p.no === 1) bus.lat = p.num; else if (p.no === 2) bus.lng = p.num;
+              else if (p.no === 3) bus.bearing = p.num; else if (p.no === 5) bus.speed = p.num;
+            }
+          } else if (f.no === 5) bus.time = f.num;
+          else if (f.no === 8) { for (const d of fields(f.bytes)) if (d.no === 1) bus.id = text.decode(d.bytes); }
+        }
+        out.push(bus);
+      }
+    }
+    return out;
+  }
+
+  /** @typedef {{ from: [number, number], to: [number, number], bearing: number, speed: number, time: number, svc: number, route: string }} LiveBus */
+  /** @type {Map<string, LiveBus>} */
+  const buses = new Map();
+  let movedAt = 0; // when the last poll landed: buses glide from `from` to `to` until the next one
+  let liveTimer = 0, liveFrame = 0;
+
+  /** Where a bus is drawn right now, part-way between its last two pings */
+  function busAt(/** @type {LiveBus} */ { from, to }, now = performance.now()) {
+    const k = Math.min(1, (now - movedAt) / LIVE.every);
+    return /** @type {[number, number]} */ ([from[0] + (to[0] - from[0]) * k, from[1] + (to[1] - from[1]) * k]);
+  }
+
+  function drawBuses() {
+    if (!map.getSource('buses')) return;
+    const { services } = data?.region ?? { services: [] };
+    const only = view.kind === 'service' ? view.svc : -1; // a bus's page shows just its own buses
+    const now = performance.now();
+    source('buses').setData(fc([...buses].filter(([, b]) => only < 0 || b.svc === only).map(([id, b]) => {
+      const svc = services[b.svc];
+      return { type: 'Feature', geometry: { type: 'Point', coordinates: busAt(b, now) },
+        properties: { id, svc: b.svc, no: svc?.no ?? b.route, color: svc ? colorOf(svc) : STOP, bearing: b.bearing, speed: Math.round(b.speed), time: b.time } };
+    })));
+  }
+
+  // ~12 redraws a second while buses glide: smooth enough, and easy on phones
+  function animateBuses() {
+    cancelAnimationFrame(liveFrame);
+    let last = 0;
+    const step = (/** @type {number} */ now) => {
+      if (now - last > 80) { last = now; drawBuses(); }
+      if (now - movedAt < LIVE.every && buses.size) liveFrame = requestAnimationFrame(step);
+    };
+    liveFrame = requestAnimationFrame(step);
+  }
+
+  async function pollBuses() {
+    const region = data?.region;
+    if (region?.id !== LIVE.region) return;
+    // Rapid KL pings carry the GTFS route id ("U2500"); feeder pings carry the bus number ("T460", "T155 Inbound")
+    const byId = new Map(region.services.flatMap((s, i) => [[s.no, i], [s.id, i]]));
+    const feeds = await Promise.all(LIVE.feeds.map((f) => fetch(LIVE.url(f)).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null)));
+    if (data?.region !== region) return; // city changed while loading
+    if (feeds.every((f) => !f)) return; // offline: keep what we have
+    const now = performance.now(), fresh = Date.now() / 1000 - LIVE.staleAfter;
+    const seen = new Set();
+    let unmatched = 0;
+    for (const feed of feeds) {
+      if (!feed) continue;
+      for (const v of parseVehicles(new Uint8Array(feed))) {
+        if (!v.id || !v.lat || !v.lng || v.time < fresh) continue; // GPS glitches report 0,0
+        const svc = byId.get(v.route) ?? byId.get(v.route.split(' ')[0]) ?? -1;
+        if (svc < 0) unmatched++;
+        const old = buses.get(v.id);
+        const to = /** @type {[number, number]} */ ([v.lng, v.lat]);
+        // Glide from where it is drawn now; a new bus (or a GPS jump of ~1 km+) just appears in place
+        const at = old ? busAt(old, now) : to;
+        const from = Math.abs(at[0] - to[0]) + Math.abs(at[1] - to[1]) < 0.01 ? at : to;
+        buses.set(v.id, { from, to, bearing: v.bearing, speed: v.speed, time: v.time, svc, route: v.route });
+        seen.add(v.id);
+      }
+    }
+    for (const id of buses.keys()) if (!seen.has(id)) buses.delete(id);
+    if (unmatched) console.info(`Live buses: ${unmatched} of ${buses.size} on routes this map doesn't have`);
+    movedAt = now;
+    animateBuses();
+  }
+
+  /** Poll only while it's worth it: Klang Valley on screen, tab visible */
+  function syncLive() {
+    clearInterval(liveTimer);
+    const on = regionId === LIVE.region && !document.hidden;
+    if (on) { pollBuses(); liveTimer = setInterval(pollBuses, LIVE.every); }
+    if (regionId !== LIVE.region) { buses.clear(); drawBuses(); }
+  }
+  document.addEventListener('visibilitychange', syncLive);
+
+  // ---------- Flyover: a 3D night flight along the bus's route, the line drawing itself stop by stop ----------
+
+  const TOUR = {
+    zoom: 17.2, pitch: 68,
+    pull: 0.6, // zoom levels the camera pulls back each time the speed doubles
+    lead: 1600, // ms to swoop down to the first stop
+    look: 400, // metres ahead the camera faces
+    nose: 25, // metres of road ahead the bus marker points along
+    // Each stop: `zone` metres either side where the bus brakes and pulls away, down to `crawl` × full speed at the stop
+    halt: { zone: 50, crawl: 0.15 },
+    rail: { zone: 100, crawl: 0.1 }, // a stop with a rail transfer: a longer look
+    stretch: 250, // metres of open road for each extra 1× of speed…
+    top: 2.5, // …up to this limit. The camera pulls back as it speeds up, so the ground never rushes by
+    perKm: 6, // ms per metre (= seconds per km) at 1×, between stops
+    hold: 1500, // ms at the last stop before the map comes back
+  };
+  const NIGHT = {
+    land: '#0a1020', water: '#04070f', road: '#1e3158', text: '#8ea3cf',
+    labels: ['highway-name-major', 'label_town', 'label_city', 'label_city_capital'], // the only basemap names kept, dimmed
+    // A horizon to fly towards; the haze also hides the far, half-loaded tiles
+    sky: { 'sky-color': '#060b1a', 'horizon-color': '#2a4f9c', 'fog-color': '#0a1020', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.7, 'fog-ground-blend': 0.55, 'atmosphere-blend': 0 },
+  };
+  const hud = $('tour');
+
+  /** @type {[layer: string, prop: string, value: unknown][]} the daytime paint, to put back after */
+  let dayPaint = [];
+  /** @type {string[]} basemap name layers hidden for the flight */
+  let dayLabels = [];
+  function setNight(/** @type {boolean} */ on) {
+    for (const [layer, prop, value] of dayPaint) map.setPaintProperty(layer, prop, value);
+    for (const id of dayLabels) map.setLayoutProperty(id, 'visibility', 'visible');
+    dayPaint = [];
+    dayLabels = [];
+    for (const id of ['tour-buildings', 'tour-glow', 'tour-rail-ring', 'tour-rail-label']) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+    for (const id of ['sel-casing', 'sel-arrows', 'stops', 'stops-icon']) map.setLayoutProperty(id, 'visibility', on ? 'none' : 'visible');
+    map.setSky(on ? NIGHT.sky : { 'atmosphere-blend': 0 });
+    if (!on) return;
+    railOpacity(1); // rail lines in full colour: they are the transfers (the bus view fades them again after)
+    /** @type {[layer: string, paint: Record<string, string | number>][]} */
+    const night = [
+      ['sel-line', { 'line-opacity': 1 }],
+      ['sel-stops-label', { 'text-color': '#ffffff', 'text-halo-color': NIGHT.land }],
+      ['station-label', { 'text-color': '#ffffff', 'text-halo-color': NIGHT.land }],
+    ];
+    // The basemap: land and its fills go one dark colour, so only roads, water and buildings read
+    for (const l of map.getStyle().layers) {
+      if (l.type !== 'background' && !('source' in l && l.source === 'openmaptiles')) continue;
+      const wet = l.id.startsWith('water');
+      if (l.type === 'background') night.push([l.id, { 'background-color': NIGHT.land }]);
+      else if (l.type === 'fill') night.push([l.id, { 'fill-color': wet ? NIGHT.water : NIGHT.land }]);
+      else if (l.type === 'line') night.push([l.id, { 'line-color': wet ? NIGHT.water : NIGHT.road }]);
+      else if (l.type === 'symbol' && NIGHT.labels.includes(l.id)) night.push([l.id, { 'text-color': NIGHT.text, 'text-halo-color': NIGHT.land, 'text-opacity': 0.6 }]);
+      else if (l.type === 'symbol' && map.getLayoutProperty(l.id, 'visibility') !== 'none') {
+        // Every other name (neighbourhoods, side streets, lakes, shops) is noise at flying speed
+        map.setLayoutProperty(l.id, 'visibility', 'none');
+        dayLabels.push(l.id);
+      }
+    }
+    for (const [layer, paint] of night) {
+      for (const [prop, value] of Object.entries(paint)) {
+        dayPaint.push([layer, prop, map.getPaintProperty(layer, prop)]);
+        map.setPaintProperty(layer, prop, value);
+      }
+    }
+  }
+
+  /** @typedef {{ pause: () => void, prev: () => void, next: () => void, rate: () => void }} TourKeys what the bar's buttons do */
+  /** @type {{ frame: number, coords: [number, number][], bus: import('maplibre-gl').Marker, keys: TourKeys } | null} */
+  let tour = null;
+  let tourRate = 1; // 1×, 2× or 4×: kept from one flight to the next
+
+  /** Flies the direction on screen, then the others in turn (`leg` counts them), so a two-way bus goes there and back */
+  function startTour(leg = 1) {
+    if (!data || view.kind !== 'service') return;
+    stopTour();
+    const { region, lines, stopServices } = data;
+    const svcIdx = view.svc;
+    const svc = region.services[svcIdx], dir = view.dir, pattern = svc.patterns[dir], { stops } = pattern;
+    const coords = lines[view.svc][view.dir];
+    if (coords.length < 2) return;
+    const color = colorOf(svc);
+
+    // The line in metres (flat earth: fine at city scale), with the distance travelled at each vertex
+    const rad = Math.PI / 180, cos = Math.cos(coords[0][1] * rad);
+    const xy = (/** @type {number} */ lng, /** @type {number} */ lat) => [lng * rad * cos * 6371000, lat * rad * 6371000];
+    const pts = coords.map(([lng, lat]) => xy(lng, lat));
+    const at = [0];
+    for (let i = 1; i < pts.length; i++) at.push(at[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+    const length = at[at.length - 1];
+
+    const pointAt = (/** @type {number} */ d) => {
+      let i = 1;
+      while (i < at.length - 1 && at[i] < d) i++;
+      const k = Math.max(0, Math.min(1, (d - at[i - 1]) / (at[i] - at[i - 1] || 1)));
+      const a = coords[i - 1], b = coords[i];
+      return /** @type {[number, number]} */ ([a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k]);
+    };
+    /** Compass heading of the road ahead (at the end: of the last stretch) */
+    const heading = (/** @type {number} */ d) => {
+      const from = Math.max(0, Math.min(d, length - TOUR.look));
+      const a = pointAt(from), b = pointAt(from + TOUR.look);
+      return Math.atan2((b[0] - a[0]) * cos, b[1] - a[1]) / rad;
+    };
+
+    // How far along the line each stop sits: snap it to the nearest stretch, searching on from the stop before
+    let seg = 0;
+    const stopAt = stops.map((s) => {
+      const [x, y] = xy(region.stops[s][0], region.stops[s][1]);
+      let best = Infinity, d = at[seg];
+      for (let j = seg; j < pts.length - 1; j++) {
+        const [ax, ay] = pts[j], dx = pts[j + 1][0] - ax, dy = pts[j + 1][1] - ay;
+        const k = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1)));
+        const off = Math.hypot(x - ax - dx * k, y - ay - dy * k);
+        if (off < best) { best = off; d = at[j] + (at[j + 1] - at[j]) * k; seg = j; }
+        else if (best < 50 && off > 200) break; // passed it: a loop coming back this way must not steal the stop
+      }
+      return d;
+    });
+    stopAt[0] = 0; // the first stop is there from the start, even if the line begins a little before it
+    // Rail transfers are the highlights: a ring in the line's colour, its code, and a longer halt
+    const dots = stops.map((s, k) => {
+      const rail = railNear(s);
+      if (!rail.length) return point(s, { color, ring: '#ffffff', end: k === 0 || k === stops.length - 1 });
+      const railColor = rail[0].line.mode === 'komuter' ? KTM : rail[0].line.color;
+      return point(s, { color, ring: railColor, end: true, rail: rail.map((r) => railCode(r.line)).join(' · '), railColor, railInk: inkOn(railColor) });
+    });
+    /** Like a real bus: brakes into each stop, almost halts, pulls away, and opens up on a long stretch with no stops. 1 = normal speed */
+    const paceAt = (/** @type {number} */ d) => {
+      let pace = 1, clear = Infinity; // `clear`: metres of open road to the nearest stop's zone
+      for (let k = 0; k < stopAt.length; k++) {
+        const { zone, crawl } = dots[k].properties?.rail ? TOUR.rail : TOUR.halt;
+        const gap = Math.abs(stopAt[k] - d);
+        pace = Math.min(pace, crawl + (1 - crawl) * Math.min(1, gap / zone));
+        clear = Math.min(clear, Math.max(0, gap - zone));
+      }
+      return pace < 1 ? pace : Math.min(TOUR.top, 1 + clear / TOUR.stretch);
+    };
+
+    /** Draw the line up to `t` (0–1) of its length */
+    const reveal = (/** @type {number} */ t) => {
+      for (const id of ['sel-line', 'tour-glow']) map.setPaintProperty(id, 'line-gradient', ['step', ['line-progress'], color, t, 'rgba(0, 0, 0, 0)']);
+    };
+    let shown = 0;
+    const showStops = (/** @type {number} */ d) => {
+      let n = 0;
+      while (n < stops.length && stopAt[n] <= d) n++;
+      if (n === shown) return;
+      shown = n;
+      // The stop the bus is at wears the ring (`here`)
+      source('sel-stops').setData(fc(dots.slice(0, shown).map((dot, k) => (k < shown - 1 ? dot : { ...dot, properties: { ...dot.properties, here: true } }))));
+      const s = stops[shown - 1];
+      sound.play(dots[shown - 1].properties?.rail ? 'transfer' : 'arrive');
+      const mins = pattern.mins?.[shown - 1];
+      $('tour-stop').textContent = region.stops[s][2];
+      $('tour-count').textContent = `Stop ${shown} of ${stops.length}${mins ? ` · ${mins} min` : ''} · to ${pattern.to}`;
+      // Change here: rail (station + walk) first, then a few of the other buses
+      $('tour-change').innerHTML = railList(s) + badges(stopServices[s].filter((o) => o !== svcIdx).slice(0, 8));
+    };
+
+    setNight(true);
+    document.body.classList.add('touring');
+    $('tour-badge').innerHTML = badge(svc);
+    hud.hidden = false;
+    source('sel').setData(fc([line(coords, { color })]));
+    source('sel-stops').setData(fc([]));
+    reveal(0);
+    showStops(0);
+
+    // The bus leading the line, and what the camera follows. A marker, not a map layer: it moves in the same frame
+    // as the camera (layer data goes through a worker and lands a few frames late, which looks jittery)
+    const el = document.createElement('div');
+    el.className = 'tour-bus';
+    el.innerHTML = Array.from({ length: 8 }, (_, z) => `<svg viewBox="0 0 34 46" style="transform: translateZ(${z * 1.5}px)"><path d="M17 0 34 46 17 36 0 46z"/></svg>`).join('');
+    const bus = new maplibregl.Marker({ element: el, rotationAlignment: 'map', pitchAlignment: 'map', subpixelPositioning: true }).setLngLat(coords[0]).addTo(map);
+    /** Shortest turn from one compass angle to another, in degrees (-180 to 180) */
+    const turnTo = (/** @type {number} */ to, /** @type {number} */ from) => ((((to - from) % 360) + 540) % 360) - 180;
+    /** Sit at `d`, nose along the next few metres of road (eased, so corners in the data don't snap it round) */
+    let nose = NaN;
+    const placeBus = (/** @type {number} */ d) => {
+      const from = Math.max(0, Math.min(d, length - TOUR.nose));
+      const a = pointAt(from), b = pointAt(from + TOUR.nose);
+      const road = Math.atan2((b[0] - a[0]) * cos, b[1] - a[1]) / rad;
+      nose = Number.isNaN(nose) ? road : nose + turnTo(road, nose) * 0.2;
+      bus.setLngLat(pointAt(d)).setRotation(nose);
+    };
+
+    // Normal speed, in metres per ms: the same for every route, only slower when a short one would be over in a blink
+    const speed = length / Math.max(30_000, length * TOUR.perKm);
+    let d = 0, drop = 0, bearing = heading(0), last = performance.now(), endAt = Infinity, paused = false;
+    let start = last + TOUR.lead;
+    const label = (/** @type {string} */ key, /** @type {string} */ text) => { (/** @type {HTMLElement} */ (hud.querySelector(`[data-tour="${key}"]`))).textContent = text; };
+    label('pause', '❚❚');
+    label('rate', `${tourRate}×`);
+    /** Jump to a stop: the camera faces the road there at once, no long sweep round */
+    const seek = (/** @type {number} */ k) => {
+      d = stopAt[Math.max(0, Math.min(stops.length - 1, k))];
+      bearing = heading(d);
+      nose = NaN;
+      start = 0; // skips the swoop in
+    };
+    /** @type {TourKeys} */
+    const keys = {
+      pause() { paused = !paused; label('pause', paused ? '▶' : '❚❚'); },
+      prev: () => seek(shown - 2),
+      next: () => seek(shown),
+      rate() { tourRate = tourRate >= 4 ? 1 : tourRate * 2; label('rate', `${tourRate}×`); },
+    };
+    // The bus sits low on screen, so most of the view is the road ahead
+    map.easeTo({ center: coords[0], zoom: TOUR.zoom, pitch: TOUR.pitch, bearing, duration: TOUR.lead,
+      padding: { top: innerHeight * 0.15, bottom: 0, left: 0, right: 0 } });
+
+    const step = (/** @type {number} */ now) => {
+      if (!tour) return;
+      const dt = Math.min(now - last, 50); // a hidden tab or a slow frame pauses the flight instead of skipping ahead
+      last = now;
+      if (now >= start) {
+        const pace = paceAt(d);
+        if (!paused) d = Math.min(length, d + speed * pace * tourRate * dt);
+        // Faster = further out, so the road never rushes by. Applied as a change to the zoom, so the rider's own zooming stays
+        const pull = drop + (TOUR.pull * Math.log2(Math.max(1, pace)) - drop) * (1 - Math.exp(-dt / 900));
+        const zoom = map.getZoom() - (pull - drop);
+        drop = pull;
+        map.setPaintProperty('tour-rail-ring', 'circle-radius', 24 + 6 * Math.sin(now / 250));
+        // Turn towards the road ahead gently: sharp corners become sweeps
+        bearing += turnTo(heading(d), bearing) * (1 - Math.exp(-dt / 700));
+        map.jumpTo({ center: pointAt(d), bearing, zoom });
+        reveal(d / length);
+        showStops(d);
+        // At the last stop: wait a moment, then go on (not while paused, and a jump back cancels it)
+        if (d < length || paused) endAt = Infinity;
+        else if (endAt === Infinity) endAt = now + TOUR.hold;
+      }
+      placeBus(d);
+      if (now >= endAt) {
+        if (leg >= svc.patterns.length) return stopTour();
+        // Turn round: the panel and the link follow to the next direction
+        view = { kind: 'service', svc: svcIdx, dir: (dir + 1) % svc.patterns.length };
+        render();
+        return startTour(leg + 1);
+      }
+      tour.frame = requestAnimationFrame(step);
+    };
+    tour = { frame: requestAnimationFrame(step), coords, bus, keys };
+    writeHash(); // the link now ends in /fly: opening it starts the flight
+  }
+
+  function stopTour() {
+    if (!tour) return;
+    cancelAnimationFrame(tour.frame);
+    const { coords } = tour;
+    tour.bus.remove();
+    tour = null;
+    document.body.classList.remove('touring');
+    hud.hidden = true;
+    setNight(false);
+    writeHash();
+    drawSelection();
+    map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+    fitCoords(coords, 16, { pitch: 0, bearing: 0, duration: 1200 });
+  }
+  // The bar's buttons; the keys (Esc, space, ← →) press the same buttons
+  hud.addEventListener('click', (e) => {
+    const act = /** @type {HTMLElement | null} */ ((/** @type {HTMLElement} */ (e.target)).closest('[data-tour]'))?.dataset.tour;
+    if (!act || !tour) return;
+    sound.play(act === 'end' ? 'close' : 'tick');
+    if (act === 'end') stopTour(); else tour.keys[/** @type {keyof TourKeys} */ (act)]();
+  });
 
   // ---------- Events ----------
 
@@ -1327,13 +1828,18 @@
   addEventListener('keydown', (e) => {
     const typing = /** @type {HTMLElement} */ (e.target).closest('input, textarea');
     if (typing || !cityMenu.hidden || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (tour) {
+      const act = /** @type {Record<string, string>} */ ({ Escape: 'end', ' ': 'pause', ArrowLeft: 'prev', ArrowRight: 'next' })[e.key];
+      if (act) { e.preventDefault(); (/** @type {HTMLElement | null} */ (hud.querySelector(`[data-tour="${act}"]`)))?.click(); }
+      return;
+    }
     if (e.key === '/') { e.preventDefault(); q.focus(); }
     if (e.key === 'Escape' && view.kind !== 'home') (/** @type {HTMLElement | null} */ (body.querySelector('[data-back]')))?.click();
   });
   clearBtn.addEventListener('click', () => { q.value = ''; render(); q.focus(); });
 
   body.addEventListener('click', (e) => {
-    const el = /** @type {HTMLElement | null} */ ((/** @type {HTMLElement} */ (e.target)).closest('[data-svc],[data-stop],[data-dir],[data-back],[data-place],[data-passing]'));
+    const el = /** @type {HTMLElement | null} */ ((/** @type {HTMLElement} */ (e.target)).closest('[data-svc],[data-stop],[data-dir],[data-back],[data-place],[data-passing],[data-fly]'));
     if (!el || !data) return;
     sound.play(el.dataset.back !== undefined ? 'close' : el.dataset.svc ? 'bus' : el.dataset.stop || el.dataset.place ? 'stop' : 'tick');
     if (el.dataset.back !== undefined) {
@@ -1341,6 +1847,7 @@
         : view.kind === 'stop' && fromPlace ? go({ kind: 'place', place: fromPlace })
         : go({ kind: 'home' }, { fly: false });
     }
+    if (el.dataset.fly !== undefined) return startTour();
     if (el.dataset.place) return openPlace(places.hits[+el.dataset.place]);
     if (el.dataset.passing !== undefined && view.kind === 'stop') {
       showAll = !showAll;
@@ -1409,6 +1916,12 @@
   map.on('click', (e) => {
     if (!data) return;
     const box = /** @type {[[number, number], [number, number]]} */ ([[e.point.x - 8, e.point.y - 8], [e.point.x + 8, e.point.y + 8]]);
+    // A live bus opens its route (already open: nothing to do)
+    const bus = map.queryRenderedFeatures(box, { layers: ['buses'] })[0];
+    if (bus) {
+      if (bus.properties.svc >= 0 && view.kind !== 'service') { sound.play('bus'); go({ kind: 'service', svc: bus.properties.svc, dir: 0 }); }
+      return;
+    }
     const stop = map.queryRenderedFeatures(box, { layers: pickable.filter((l) => map.getLayer(l)) })[0];
     if (stop) {
       const i = stop.properties.i;
@@ -1430,6 +1943,16 @@
   map.on('mousemove', (e) => {
     if (!data) return;
     const box = /** @type {[[number, number], [number, number]]} */ ([[e.point.x - 6, e.point.y - 6], [e.point.x + 6, e.point.y + 6]]);
+    const bus = map.queryRenderedFeatures(box, { layers: ['buses'] })[0];
+    if (bus) {
+      const { no, speed, time } = bus.properties;
+      tip.innerHTML = `<span class="tag">${escapeHtml(String(no))}</span>${speed} km/h · ${Math.max(0, Math.round(Date.now() / 1000 - time))} s ago`;
+      tip.style.left = `${e.originalEvent.clientX}px`;
+      tip.style.top = `${e.originalEvent.clientY}px`;
+      tip.classList.add('show');
+      map.getCanvas().style.cursor = bus.properties.svc >= 0 ? 'pointer' : '';
+      return;
+    }
     const stop = map.queryRenderedFeatures(box, { layers: pickable })[0];
     const route = !stop && view.kind === 'stop' ? map.queryRenderedFeatures(box, { layers: ['sel-line'] })[0] : undefined;
     if (view.kind === 'stop') focusService(route ? route.properties.svc : -1);
@@ -1461,9 +1984,11 @@
   map.on('movestart', () => tip.classList.remove('show'));
   map.getCanvas().addEventListener('mouseleave', () => { tip.classList.remove('show'); hoverArea(''); });
 
-  const soundBtn = $('sound');
-  soundBtn.setAttribute('aria-pressed', String(sound.on));
-  soundBtn.addEventListener('click', () => soundBtn.setAttribute('aria-pressed', String(sound.toggle())));
+  // Two sound buttons (map tools, flyover bar): one setting, both show it
+  const soundBtns = document.querySelectorAll('.sound-btn');
+  const showSound = (/** @type {boolean} */ on) => { for (const b of soundBtns) b.setAttribute('aria-pressed', String(on)); };
+  showSound(sound.on);
+  for (const b of soundBtns) b.addEventListener('click', () => showSound(sound.toggle()));
 
   $('zoom-in').addEventListener('click', () => map.zoomIn());
   $('zoom-out').addEventListener('click', () => map.zoomOut());
