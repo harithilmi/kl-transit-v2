@@ -25,7 +25,8 @@ body {
 button, input, select { font: inherit; color: inherit; }
 button, .tour, .panel { touch-action: manipulation; } /* quick repeated taps are taps, not a double-tap zoom */
 button { cursor: pointer; }
-#map { position: fixed; inset: 0; }
+#map { position: fixed; inset: 0; transition: opacity 0.16s; }
+body.landing #map { opacity: 0; } /* a flyover ending: the day map is put back behind a fade */
 .maplibregl-ctrl-bottom-left { left: calc(var(--panel-w) + 12px); }
 
 /* ---------- Glass ---------- */
@@ -61,29 +62,12 @@ button { cursor: pointer; }
 .brand { display: flex; align-items: center; gap: 10px; }
 .brand h1 { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -0.01em; }
 .brand h1 span { color: var(--ink-3); font-weight: 600; }
-.city { position: relative; margin-left: auto; }
 .region {
-  appearance: none; border: 0; border-radius: 999px; padding: 6px 28px 6px 12px;
+  appearance: none; margin-left: auto; border: 0; border-radius: 999px; padding: 6px 28px 6px 12px;
   background: var(--chip) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235f5f64' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 11px center;
   font-weight: 700; font-size: 13px; cursor: pointer; transition: transform 0.16s var(--ease-out);
 }
 .region:active { transform: scale(0.96); }
-.city-menu {
-  position: absolute; top: calc(100% + 6px); right: 0; z-index: 5; width: 250px; margin: 0; padding: 6px;
-  list-style: none; border-radius: 14px; transform-origin: top right;
-  animation: pop 0.18s var(--ease-out) both;
-}
-.city-menu[hidden] { display: none; }
-@keyframes pop { from { opacity: 0; transform: scale(0.96) translateY(-4px); } }
-.city-menu button {
-  width: 100%; border: 0; background: none; text-align: left; border-radius: 9px; padding: 8px 10px;
-  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 1px 8px; transition: background-color 0.15s;
-}
-.city-menu button:hover, .city-menu button:focus-visible { background: var(--hover); outline: none; }
-.city-menu b { font-size: 14px; }
-.city-menu small { grid-column: 1; color: var(--ink-3); font-size: 11px; font-weight: 600; }
-.city-menu .tick { grid-row: 1 / 3; grid-column: 2; color: var(--accent); opacity: 0; }
-.city-menu [aria-selected='true'] .tick { opacity: 1; }
 .search { position: relative; }
 .search svg { position: absolute; left: 11px; top: 50%; translate: 0 -50%; width: 17px; height: 17px; color: var(--ink-3); pointer-events: none; }
 .search input {
@@ -139,6 +123,11 @@ button { cursor: pointer; }
 /* Route names wrap to two lines so the destination isn't cut off */
 .row .t.wrap { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.3; }
 .row .s { color: var(--ink-3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Picking a city: the one you are in is ticked */
+.row.city { padding-block: 10px; }
+.row.city:focus-visible { background: var(--hover); outline: none; }
+.row.city .tick { color: var(--accent); font-weight: 700; opacity: 0; }
+.row.city[aria-selected='true'] .tick { opacity: 1; }
 .row .code { color: var(--ink-3); font-weight: 700; font-size: 11px; font-variant-numeric: tabular-nums; }
 .stop-icon {
   width: 26px; height: 26px; border-radius: 50%; flex: none; display: grid; place-items: center;

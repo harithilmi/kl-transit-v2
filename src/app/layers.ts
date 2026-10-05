@@ -83,6 +83,13 @@ function busIcon() {
   return g.getImageData(0, 0, size, size);
 }
 
+/**
+ * The deepest tiles our own map data is cut into; closer in, these are stretched (as the basemap's are, at the same level).
+ * MapLibre's default (18) means some 15 small tiles per source in the tilted flyover, each drawn, tracked and, on every
+ * data change, rebuilt separately. At 14 a point is still placed to within 30 cm
+ */
+const TILE_MAX = 14;
+
 export const fc = (features: GeoJSON.Feature[]): GeoJSON.FeatureCollection => ({ type: 'FeatureCollection', features });
 
 /**
@@ -133,7 +140,7 @@ export function addLayers(map: MapLibre, regions: RegionMeta[]) {
   const round = { 'line-cap': 'round', 'line-join': 'round' };
 
   // Service areas: every city's catchment (500 m walk round its stops). Current city tinted, others a quiet outline you can click
-  map.addSource('areas', { type: 'geojson', promoteId: 'id', data: fc(regions.map((r) => ({ type: 'Feature', properties: { id: r.id, name: r.name },
+  map.addSource('areas', { type: 'geojson', maxzoom: TILE_MAX, promoteId: 'id', data: fc(regions.map((r) => ({ type: 'Feature', properties: { id: r.id, name: r.name },
     geometry: { type: 'MultiPolygon', coordinates: r.area } }))) });
   add({ id: 'area-fill', type: 'fill', source: 'areas', paint: areaFill('') });
   add({ id: 'area-line', type: 'line', source: 'areas', layout: round,
@@ -141,7 +148,7 @@ export function addLayers(map: MapLibre, regions: RegionMeta[]) {
       'line-width': ['interpolate', ['linear'], ['zoom'], 6, ['case', areaHover, 2, 1], 14, ['case', areaHover, 2.5, 1.5]],
       'line-opacity': areaLineOpacity('') } });
   // Other cities: one name per city (a polygon label repeats per tile), at its outline's middle
-  map.addSource('area-names', { type: 'geojson', data: fc(regions.map((r) => {
+  map.addSource('area-names', { type: 'geojson', maxzoom: TILE_MAX, data: fc(regions.map((r) => {
     const ring = r.area[0][0];
     const mid = [0, 1].map((k) => ring.reduce((sum, c) => sum + c[k], 0) / ring.length);
     return { type: 'Feature', properties: { id: r.id, name: r.name }, geometry: { type: 'Point', coordinates: mid } };
@@ -152,8 +159,8 @@ export function addLayers(map: MapLibre, regions: RegionMeta[]) {
 
   // Rail + ferry (Apple Maps transit style): official colours on a white casing, stations as white dots with a dark ring.
   // Context only: drawn under the bus layers and never clickable
-  map.addSource('transit', { type: 'geojson', data: fc([]) });
-  map.addSource('stations', { type: 'geojson', data: fc([]) });
+  map.addSource('transit', { type: 'geojson', maxzoom: TILE_MAX, data: fc([]) });
+  map.addSource('stations', { type: 'geojson', maxzoom: TILE_MAX, data: fc([]) });
   const ferry: Expr = ['==', ['get', 'mode'], 'ferry'];
   const railWidth = (extra: number): Expr => ['interpolate', ['linear'], ['zoom'],
     8, ['+', ['case', minor, 0.5, 0.8], extra], 12, ['+', ['case', minor, 0.8, 1.4], extra], 16, ['+', ['case', minor, 2, 3.5], extra], 19, ['+', ['case', minor, 4, 7], extra]];
@@ -191,7 +198,7 @@ export function addLayers(map: MapLibre, regions: RegionMeta[]) {
     ['format', ['get', 'code'], { 'font-scale': 0.8 }, '\n', {}, ['get', 'name'], { 'text-color': '#2b2f38' }],
     ['format', ['get', 'name'], { 'text-color': '#2b2f38' }]];
   const stopLabel: Expr = ['step', ['zoom'], '', 15, shortLabel, 16, nameAndCode];
-  map.addSource('stops', { type: 'geojson', tolerance: 10, buffer: 0, data: fc([]) });
+  map.addSource('stops', { type: 'geojson', maxzoom: TILE_MAX, tolerance: 10, buffer: 0, data: fc([]) });
   add({ id: 'stops', type: 'circle', source: 'stops',
     paint: {
       'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 0.75, 14, 3, 15, 4.5, 18, 7],
@@ -211,7 +218,7 @@ export function addLayers(map: MapLibre, regions: RegionMeta[]) {
     paint: { 'text-color': STOP, 'text-halo-color': '#ffffff', 'text-halo-width': 1.2 } });
 
   // Selection: a service's direction, or all services passing a stop
-  map.addSource('sel', { type: 'geojson', lineMetrics: true, data: fc([]) });
+  map.addSource('sel', { type: 'geojson', maxzoom: TILE_MAX, lineMetrics: true, data: fc([]) });
   // Thin when zoomed out, wider + shifted to the left lane when zoomed in (MY drives on the left)
   const thin: Expr = ['boolean', ['get', 'thin'], false];
   const dim: Expr = ['boolean', ['get', 'dim'], false];
@@ -253,7 +260,7 @@ export function addLayers(map: MapLibre, regions: RegionMeta[]) {
   // Stops sit on top of route lines
   for (const id of ['stops', 'stops-icon']) map.moveLayer(id);
 
-  map.addSource('sel-stops', { type: 'geojson', data: fc([]) });
+  map.addSource('sel-stops', { type: 'geojson', maxzoom: TILE_MAX, data: fc([]) });
   add({ id: 'sel-stops-dot', type: 'circle', source: 'sel-stops',
     paint: {
       'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, ['case', ['get', 'end'], 4, 1.8], 15, ['case', ['get', 'end'], 8, 4.5], 18, ['case', ['get', 'end'], 11, 8]],
@@ -284,7 +291,7 @@ export function addLayers(map: MapLibre, regions: RegionMeta[]) {
     paint: { 'text-color': ['get', 'railInk'], 'text-halo-color': ['get', 'railColor'], 'text-halo-width': 3 } });
 
   // Stop hovered in the sidebar: big ring + name, over everything
-  map.addSource('hover-stop', { type: 'geojson', data: fc([]) });
+  map.addSource('hover-stop', { type: 'geojson', maxzoom: TILE_MAX, data: fc([]) });
   add({ id: 'hover-stop', type: 'circle', source: 'hover-stop',
     paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 7, 15, 11, 18, 14], 'circle-color': '#ffffff',
       'circle-stroke-color': ['get', 'color'], 'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 10, 3, 15, 5] } });
@@ -294,7 +301,7 @@ export function addLayers(map: MapLibre, regions: RegionMeta[]) {
     paint: { 'text-color': '#2b2f38', 'text-halo-color': '#ffffff', 'text-halo-width': 2 } });
 
   // Selected stop: the dot, bigger, white with a thick ring in the bus colour
-  map.addSource('pin', { type: 'geojson', data: fc([]) });
+  map.addSource('pin', { type: 'geojson', maxzoom: TILE_MAX, data: fc([]) });
   add({ id: 'pin-halo', type: 'circle', source: 'pin',
     paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 6, 15, 10, 18, 12], 'circle-color': '#ffffff',
       'circle-stroke-color': STOP, 'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 10, 3, 15, 4.5] } });
@@ -306,7 +313,7 @@ export function addLayers(map: MapLibre, regions: RegionMeta[]) {
     paint: { 'text-color': STOP, 'text-halo-color': '#ffffff', 'text-halo-width': 1.2 } });
 
   // Searched place: red dot + its name, inside a faint ring of the walk radius
-  map.addSource('place', { type: 'geojson', data: fc([]) });
+  map.addSource('place', { type: 'geojson', maxzoom: TILE_MAX, data: fc([]) });
   // WALK metres in px: 512px tiles → m/px = 40075017·cos(lat) / (512·2^z). cos(~4°) is close enough for MY
   const ringPx = WALK * 512 / (40075017 * Math.cos(4 * Math.PI / 180));
   add({ id: 'place-ring', type: 'circle', source: 'place',
@@ -322,7 +329,7 @@ export function addLayers(map: MapLibre, regions: RegionMeta[]) {
 
   // Live buses, on top of everything: marker turned to the heading, route number from street level
   map.addImage('live-bus', busIcon(), { sdf: true, pixelRatio: 2 });
-  map.addSource('buses', { type: 'geojson', data: fc([]) });
+  map.addSource('buses', { type: 'geojson', maxzoom: TILE_MAX, data: fc([]) });
   add({ id: 'buses', type: 'symbol', source: 'buses',
     layout: {
       'icon-image': 'live-bus', 'icon-size': ['interpolate', ['linear'], ['zoom'], 10, 0.55, 14, 1, 17, 1.3],

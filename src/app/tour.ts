@@ -25,6 +25,7 @@ const TOUR = {
   perKm: 6, // ms per metre (= seconds per km) at 1×, between stops
   hold: 1500, // ms at the last stop before the map comes back
 };
+const FADE = { out: 160, wait: 600 }; // ms: the map fading out as a flight ends (as in the CSS), and the longest it stays hidden
 const NIGHT = {
   land: '#0a1020', water: '#04070f', road: '#1e3158', text: '#8ea3cf',
   labels: ['highway-name-major', 'label_town', 'label_city', 'label_city_capital'], // the only basemap names kept, dimmed
@@ -51,15 +52,15 @@ export function createTour({ map, point, drawSelection, fitCoords, writeHash, hu
 
   /** The daytime paint, to put back after */
   let dayPaint: [layer: string, prop: string, value: unknown][] = [];
-  /** Basemap name layers hidden for the flight */
-  let dayLabels: string[] = [];
+  /** Basemap layers hidden for the flight */
+  let dayHidden: string[] = [];
   function setNight(on: boolean) {
     for (const [layer, prop, value] of dayPaint) map.setPaintProperty(layer, prop, value);
-    for (const id of dayLabels) map.setLayoutProperty(id, 'visibility', 'visible');
+    for (const id of dayHidden) map.setLayoutProperty(id, 'visibility', 'visible');
     dayPaint = [];
-    dayLabels = [];
+    dayHidden = [];
     for (const id of ['tour-buildings', 'tour-glow', 'tour-rail-ring', 'tour-rail-label']) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
-    for (const id of ['sel-casing', 'sel-arrows', 'stops', 'stops-icon']) map.setLayoutProperty(id, 'visibility', on ? 'none' : 'visible');
+    for (const id of ['sel-casing', 'sel-arrows', 'stops', 'stops-icon', 'area-fill', 'area-line']) map.setLayoutProperty(id, 'visibility', on ? 'none' : 'visible');
     map.setSky(on ? NIGHT.sky : { 'atmosphere-blend': 0 });
     // Phones: the tilted 3D view is the heaviest thing drawn, so fly at a lower resolution with solid buildings (no second pass)
     const sharp = Math.min(devicePixelRatio, 2);
@@ -74,19 +75,21 @@ export function createTour({ map, point, drawSelection, fitCoords, writeHash, hu
       ['sel-stops-label', { 'text-color': '#ffffff', 'text-halo-color': NIGHT.land }],
       ['station-label', { 'text-color': '#ffffff', 'text-halo-color': NIGHT.land }],
     ];
-    // The basemap: land and its fills go one dark colour, so only roads, water and buildings read
+    // The basemap: the land is one dark colour, so only roads, water and buildings read.
+    // Every layer is drawn once per tile on every frame of the flight, so the ones that would not show are hidden outright
     for (const l of map.getStyle().layers) {
-      if (l.type !== 'background' && !('source' in l && l.source === 'openmaptiles')) continue;
+      if (l.type === 'background') { night.push([l.id, { 'background-color': NIGHT.land }]); continue; }
+      if (!('source' in l) || l.source !== 'openmaptiles' || map.getLayoutProperty(l.id, 'visibility') === 'none') continue;
       const wet = l.id.startsWith('water');
-      if (l.type === 'background') night.push([l.id, { 'background-color': NIGHT.land }]);
-      else if (l.type === 'fill') night.push([l.id, { 'fill-color': wet ? NIGHT.water : NIGHT.land }]);
-      else if (l.type === 'line') night.push([l.id, { 'line-color': wet ? NIGHT.water : NIGHT.road }]);
-      else if (l.type === 'symbol' && NIGHT.labels.includes(l.id)) night.push([l.id, { 'text-color': NIGHT.text, 'text-halo-color': NIGHT.land, 'text-opacity': 0.6 }]);
-      else if (l.type === 'symbol' && map.getLayoutProperty(l.id, 'visibility') !== 'none') {
-        // Every other name (neighbourhoods, side streets, lakes, shops) is noise at flying speed
+      const unseen = l.type === 'fill' ? !wet && !l.id.includes('pier') // parks, woods, flat buildings: the colour of the land they lie on
+        : l.type === 'line' ? l.id.endsWith('casing') // road edges: the colour of the road inside them
+        : l.type === 'symbol' && !NIGHT.labels.includes(l.id); // names (neighbourhoods, side streets, lakes, shops): noise at flying speed
+      if (unseen) {
         map.setLayoutProperty(l.id, 'visibility', 'none');
-        dayLabels.push(l.id);
-      }
+        dayHidden.push(l.id);
+      } else if (l.type === 'fill') night.push([l.id, { 'fill-color': wet ? NIGHT.water : NIGHT.land }]);
+      else if (l.type === 'line') night.push([l.id, { 'line-color': wet ? NIGHT.water : NIGHT.road }]);
+      else if (l.type === 'symbol') night.push([l.id, { 'text-color': NIGHT.text, 'text-halo-color': NIGHT.land, 'text-opacity': 0.6 }]);
     }
     for (const [layer, paint] of night) {
       for (const [prop, value] of Object.entries(paint)) {
@@ -272,7 +275,7 @@ export function createTour({ map, point, drawSelection, fitCoords, writeHash, hu
       }
       placeBus(d);
       if (now >= endAt) {
-        if (leg >= svc.patterns.length) return stop();
+        if (leg >= svc.patterns.length) return stop({ fade: true });
         // Turn round: the panel and the link follow to the next direction
         store.set({ view: { kind: 'service', svc: svcIdx, dir: (dir + 1) % svc.patterns.length } });
         return start(leg + 1);
@@ -283,7 +286,16 @@ export function createTour({ map, point, drawSelection, fitCoords, writeHash, hu
     writeHash(); // the link now ends in /fly: opening it starts the flight
   }
 
-  function stop() {
+  /** The day map coming back behind the fade (see `stop`), and its timer */
+  let landing: (() => void) | null = null, landingTimer = 0;
+
+  /**
+   * Back to the day map with the whole route in view. `fade`: as a cut behind a short fade, not a camera move. Putting
+   * the day map back rebuilds every tile, and a camera pulling out and levelling off at the same moment would load a
+   * few hundred more on the way that are never looked at
+   */
+  function stop({ fade = false } = {}) {
+    if (landing) { clearTimeout(landingTimer); landing(); } // a fade still under way: finish it now
     if (!tour) return;
     cancelAnimationFrame(tour.frame);
     const { coords } = tour;
@@ -291,22 +303,41 @@ export function createTour({ map, point, drawSelection, fitCoords, writeHash, hu
     tour = null;
     document.body.classList.remove('touring');
     store.set({ tour: null });
-    setNight(false);
     writeHash();
-    drawSelection();
-    map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
-    fitCoords(coords, 16, { pitch: 0, bearing: 0, duration: 1200 });
+    const land = (duration: number) => {
+      setNight(false);
+      drawSelection();
+      map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+      fitCoords(coords, 16, { pitch: 0, bearing: 0, duration });
+    };
+    if (!fade) return land(1200);
+    const { classList } = document.body;
+    classList.add('landing');
+    landing = () => {
+      landing = null;
+      land(0);
+      // Shown once the route's tiles are drawn, or soon after regardless
+      const show = () => { clearTimeout(cap); map.off('idle', show); classList.remove('landing'); };
+      const cap = window.setTimeout(show, FADE.wait);
+      map.once('idle', show);
+    };
+    landingTimer = window.setTimeout(landing, FADE.out);
   }
 
   return {
     start: () => start(),
-    stop,
+    /** At once: something else is about to take the map */
+    stop: () => stop(),
+    /** The flight is over (End, Esc, or the last stop): fade back to the route */
+    end: () => stop({ fade: true }),
     get active() { return tour !== null; },
     press(key: TourKey) { tour?.keys[key](); },
     destroy() {
       if (tour) cancelAnimationFrame(tour.frame);
+      clearTimeout(landingTimer);
       tour = null;
-      document.body.classList.remove('touring');
+      landing = null;
+      document.body.classList.remove('touring', 'landing');
     },
   };
 }

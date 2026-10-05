@@ -483,7 +483,7 @@ export function createController(container: HTMLElement, regions: RegionMeta[]) 
     pressTour(key: TourKey | 'end') {
       if (!tour.active) return;
       sound.play(key === 'end' ? 'close' : 'tick');
-      if (key === 'end') tour.stop(); else tour.press(key);
+      if (key === 'end') tour.end(); else tour.press(key);
     },
 
     /** The pointer is over a row of the panel (or none: -1) */
