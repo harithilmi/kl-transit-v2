@@ -1,4 +1,4 @@
-"""Static transit overlay (rail + ferry lines, stations) → data/transit.json.
+"""Static transit overlay (rail + ferry lines, stations) → public/data/transit.json.
 
 Sources:
   - Rapid Rail KL GTFS (colours, stations)      → LRT / MRT / Monorail / BRT, geometry from OSM
@@ -20,7 +20,7 @@ from shapely import LineString, MultiLineString, STRtree, Point
 from shapely.ops import linemerge, nearest_points, unary_union
 
 ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / "data" / "transit.json"
+OUT = ROOT / "public" / "data" / "transit.json"
 TMP = Path("/tmp")
 RAIL, KTM = TMP / "rail", TMP / "ktm"
 PBF = Path.home() / "valhalla/malaysia/malaysia-singapore-brunei-latest.osm.pbf"

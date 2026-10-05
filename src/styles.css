@@ -1,0 +1,285 @@
+:root {
+  --land: #f4f2ee;
+  --ink: #1d1d1f;
+  --ink-2: #5f5f64;
+  --ink-3: #9a9a9f;
+  --line: rgba(0, 0, 0, 0.07);
+  --hover: rgba(0, 0, 0, 0.04);
+  --chip: #ebe9e4;
+  --blue: #1a73e8;
+  --glass: rgba(255, 255, 255, 0.84);
+  --glass-edge: rgba(255, 255, 255, 0.95);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --panel-w: 380px;
+  --accent: #1363b8;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body {
+  background: var(--land);
+  color: var(--ink);
+  font: 14px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+button, input, select { font: inherit; color: inherit; }
+button, .tour, .panel { touch-action: manipulation; } /* quick repeated taps are taps, not a double-tap zoom */
+button { cursor: pointer; }
+#map { position: fixed; inset: 0; }
+.maplibregl-ctrl-bottom-left { left: calc(var(--panel-w) + 12px); }
+
+/* ---------- Glass ---------- */
+.glass {
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(14px) saturate(1.6);
+  backdrop-filter: blur(14px) saturate(1.6);
+  border: 1px solid var(--glass-edge);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 8px 28px rgba(0, 0, 0, 0.1);
+}
+
+.map-tools { position: fixed; top: 12px; right: 12px; display: grid; gap: 10px; z-index: 2; }
+.round {
+  width: 40px; height: 40px; border-radius: 12px; border: 0; display: grid; place-items: center;
+  color: var(--ink-2); transition: transform 0.16s var(--ease-out), color 0.2s;
+}
+.round:active { transform: scale(0.94); }
+.round svg { width: 20px; height: 20px; }
+.sound-btn .mute, .sound-btn[aria-pressed='true'] .wave { display: inline; }
+.sound-btn .wave, .sound-btn[aria-pressed='true'] .mute { display: none; }
+.zoom-pair { display: grid; border-radius: 12px; overflow: hidden; }
+.zoom-pair .round { border-radius: 0; background: none; box-shadow: none; font-size: 20px; font-weight: 500; }
+.zoom-pair .round + .round { border-top: 1px solid var(--line); }
+
+/* ---------- Panel ---------- */
+.panel {
+  position: fixed; top: 12px; left: 12px; bottom: 12px; width: calc(var(--panel-w) - 12px);
+  border-radius: 18px; display: flex; flex-direction: column; overflow: hidden; z-index: 3;
+  animation: slide-in 0.45s var(--ease-out) both;
+}
+@keyframes slide-in { from { transform: translateX(-16px); opacity: 0; } }
+.head { padding: 14px 14px 10px; display: grid; gap: 10px; border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand h1 { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -0.01em; }
+.brand h1 span { color: var(--ink-3); font-weight: 600; }
+.city { position: relative; margin-left: auto; }
+.region {
+  appearance: none; border: 0; border-radius: 999px; padding: 6px 28px 6px 12px;
+  background: var(--chip) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235f5f64' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 11px center;
+  font-weight: 700; font-size: 13px; cursor: pointer; transition: transform 0.16s var(--ease-out);
+}
+.region:active { transform: scale(0.96); }
+.city-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 5; width: 250px; margin: 0; padding: 6px;
+  list-style: none; border-radius: 14px; transform-origin: top right;
+  animation: pop 0.18s var(--ease-out) both;
+}
+.city-menu[hidden] { display: none; }
+@keyframes pop { from { opacity: 0; transform: scale(0.96) translateY(-4px); } }
+.city-menu button {
+  width: 100%; border: 0; background: none; text-align: left; border-radius: 9px; padding: 8px 10px;
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 1px 8px; transition: background-color 0.15s;
+}
+.city-menu button:hover, .city-menu button:focus-visible { background: var(--hover); outline: none; }
+.city-menu b { font-size: 14px; }
+.city-menu small { grid-column: 1; color: var(--ink-3); font-size: 11px; font-weight: 600; }
+.city-menu .tick { grid-row: 1 / 3; grid-column: 2; color: var(--accent); opacity: 0; }
+.city-menu [aria-selected='true'] .tick { opacity: 1; }
+.search { position: relative; }
+.search svg { position: absolute; left: 11px; top: 50%; translate: 0 -50%; width: 17px; height: 17px; color: var(--ink-3); pointer-events: none; }
+.search input {
+  width: 100%; border: 0; border-radius: 12px; padding: 10px 34px 10px 36px; background: #fff;
+  box-shadow: inset 0 0 0 1px var(--line); outline: none; font-size: 15px;
+  transition: box-shadow 0.2s;
+}
+.search input::-webkit-search-cancel-button { display: none; }
+.search input:focus { box-shadow: inset 0 0 0 2px var(--accent); }
+.search .clear {
+  position: absolute; right: 7px; top: 50%; translate: 0 -50%; width: 22px; height: 22px; border: 0;
+  border-radius: 50%; background: var(--chip); color: var(--ink-2); font-size: 13px; line-height: 1;
+}
+.body { flex: 1; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.section-title {
+  position: sticky; top: 0; z-index: 1; margin: 0; padding: 10px 16px 6px;
+  background: linear-gradient(var(--glass) 70%, transparent);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3);
+  display: flex; gap: 12px; align-items: center;
+}
+.op-key { display: inline-flex; align-items: center; gap: 5px; text-transform: none; letter-spacing: 0; font-weight: 600; }
+.op-key i { width: 8px; height: 8px; border-radius: 3px; }
+.empty { padding: 28px 16px; color: var(--ink-3); text-align: center; }
+
+/* Service number badge */
+.badge {
+  display: inline-grid; place-items: center; min-width: 46px; height: 26px; padding: 0 7px; border-radius: 7px;
+  --b: var(--c, var(--accent));
+  /* flat, same hue as the route line: colour → a lighter shade of it */
+  background: linear-gradient(90deg, var(--b) 30%, color-mix(in oklab, var(--b) 78%, white));
+  color: #fff; font-weight: 800; font-size: 13px;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.01em; white-space: nowrap; flex: none;
+}
+.row > .badge { min-width: 60px; } /* one column width so names line up */
+/* Rail transfer: same shape as a small bus badge, in the line's official colour */
+.rail {
+  display: inline-grid; place-items: center; height: 19px; padding: 0 5px; border-radius: 5px; vertical-align: middle;
+  background: linear-gradient(90deg, var(--c) 30%, color-mix(in oklab, var(--c) 78%, white));
+  font-size: 11px; font-weight: 800; letter-spacing: -0.01em; white-space: nowrap;
+}
+.rail-list { display: grid; gap: 4px; font-size: 13px; font-weight: 600; }
+.rail-list .s { color: var(--ink-3); font-weight: 500; }
+.badge.sm { min-width: 0; height: 19px; padding: 0 5px; border-radius: 5px; font-size: 11px; }
+.badge.lg { height: 34px; min-width: 60px; font-size: 17px; border-radius: 9px; }
+
+.row {
+  width: 100%; border: 0; background: none; text-align: left; display: flex; align-items: center; gap: 12px;
+  padding: 9px 16px; transition: background-color 0.15s;
+}
+.row:hover, .row.hl { background: var(--hover); }
+.row .main { min-width: 0; flex: 1; }
+.row .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Route names wrap to two lines so the destination isn't cut off */
+.row .t.wrap { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.3; }
+.row .s { color: var(--ink-3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .code { color: var(--ink-3); font-weight: 700; font-size: 11px; font-variant-numeric: tabular-nums; }
+.stop-icon {
+  width: 26px; height: 26px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  background: #fff; box-shadow: inset 0 0 0 2px #8a847a;
+}
+.stop-icon::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #8a847a; }
+/* Searched place: same shape as a stop, filled in the map marker's red */
+.place-icon { width: 26px; height: 26px; border-radius: 50%; flex: none; display: grid; place-items: center; background: #d6453a; }
+.place-icon::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #fff; }
+.row .dist { color: var(--ink-3); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.row.near { align-items: flex-start; }
+.row.near > .stop-icon, .row.near > .dist { margin-top: 1px; }
+
+/* Detail views */
+.detail-head { position: relative; padding: 14px 16px 12px; display: grid; gap: 10px; }
+.detail-head .title-row { padding-right: 30px; }
+.close-x {
+  position: absolute; top: 12px; right: 12px; width: 26px; height: 26px; border: 0; border-radius: 50%;
+  background: rgba(0, 0, 0, 0.08); color: var(--ink-2); font-size: 15px; line-height: 1;
+  display: grid; place-items: center; transition: color 0.15s, transform 0.16s var(--ease-out);
+}
+.close-x:hover { color: var(--ink); }
+.close-x:active { transform: scale(0.94); }
+.title-row { display: flex; align-items: center; gap: 12px; }
+.title-row h2 { margin: 0; font-size: 17px; line-height: 1.25; font-weight: 750; letter-spacing: -0.01em; }
+.title-row .op { color: var(--ink-3); font-size: 12px; font-weight: 600; margin-top: 2px; }
+.dirs { display: grid; gap: 4px; background: var(--chip); padding: 3px; border-radius: 11px; }
+.dirs button {
+  border: 0; background: none; border-radius: 8px; padding: 7px 10px; text-align: left; color: var(--ink-2);
+  font-weight: 600; display: flex; gap: 6px; align-items: center; transition: background-color 0.2s, color 0.2s, box-shadow 0.2s;
+}
+.dirs button.active { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); }
+.dirs button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.fact { background: #fff; border-radius: 11px; padding: 8px 10px; box-shadow: inset 0 0 0 1px var(--line); }
+.fact b { display: block; font-size: 15px; font-variant-numeric: tabular-nums; }
+.fact span { color: var(--ink-3); font-size: 11px; font-weight: 600; }
+.note { color: var(--ink-3); font-size: 11px; }
+.off { color: var(--ink-2); font-weight: 700; }
+.off.ended { color: #b3261e; }
+
+/* Stop timeline */
+.timeline { list-style: none; margin: 0; padding: 4px 0 24px; }
+.timeline li { position: relative; }
+.timeline .row { padding-left: 46px; align-items: flex-start; }
+.timeline li::before {
+  content: ''; position: absolute; left: 22px; top: 0; bottom: 0; width: 5px; background: var(--c); opacity: 0.9;
+}
+.timeline li:first-child::before { top: 18px; }
+.timeline li:last-child::before { bottom: calc(100% - 18px); }
+.timeline li::after {
+  content: ''; position: absolute; left: 18px; top: 13px; width: 13px; height: 13px; border-radius: 50%;
+  background: #fff; box-shadow: inset 0 0 0 3px var(--c); pointer-events: none;
+}
+.timeline li.end::after { width: 17px; height: 17px; left: 16px; top: 11px; box-shadow: inset 0 0 0 5px var(--c); }
+.others { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+
+/* Stop detail: bus mark in the stop's colour, code tag, per-bus frequency on the right */
+.code-tag {
+  display: inline-block; padding: 1px 6px; margin-right: 4px; border-radius: 6px; background: var(--chip);
+  color: var(--ink-2); font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.row .every { flex: none; color: var(--ink-3); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.chip-btn {
+  border: 0; border-radius: 999px; padding: 6px 12px; background: var(--chip); color: var(--ink-2);
+  font-weight: 700; font-size: 12px; transition: background-color 0.2s, color 0.2s, transform 0.16s var(--ease-out);
+}
+.chip-btn:active { transform: scale(0.96); }
+.chip-btn[aria-pressed='true'] { background: var(--ink); color: #fff; }
+
+.tip {
+  position: fixed; z-index: 4; pointer-events: none; padding: 4px 8px; border-radius: 8px; font-size: 12px; font-weight: 700;
+  background: var(--ink); color: #fff; white-space: nowrap; translate: -50% calc(-100% - 12px); opacity: 0; transition: opacity 0.12s;
+}
+.tip.show { opacity: 1; }
+.tip .tag { display: inline-block; margin-right: 6px; padding: 0 5px; border-radius: 5px; background: #4a5264; font-variant-numeric: tabular-nums; }
+.loading { position: fixed; left: 50%; top: 18px; translate: -50% 0; z-index: 4; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; color: var(--ink-2); }
+.loading[hidden] { display: none; }
+
+/* Flyover: the map goes dark and full-screen; only this bar stays */
+body.touring .panel { opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+/* Of the map buttons, only sound stays (a setting, not one of the bar's playback keys), dark like the bar */
+body.touring .map-tools > :not(.sound-btn) { display: none; }
+body.touring .map-tools .sound-btn { background: rgba(13, 20, 38, 0.9); border-color: rgba(255, 255, 255, 0.1); color: #dfe6f5; }
+.tour {
+  position: fixed; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); translate: -50% 0; z-index: 3;
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px 12px; padding: 10px; border-radius: 16px;
+  width: max-content; max-width: calc(100vw - 24px);
+}
+/* Dark, like the map it sits on */
+.tour.glass { background: rgba(13, 20, 38, 0.9); border-color: rgba(255, 255, 255, 0.1); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); color: #eef2fb; }
+.tour .keys { display: flex; gap: 4px; }
+.tour .keys .chip-btn { min-width: 34px; padding: 6px 10px; font-variant-numeric: tabular-nums; }
+.tour .chip-btn { background: rgba(255, 255, 255, 0.1); color: #dfe6f5; }
+.tour[hidden] { display: none; }
+/* The bus at the head of the line: an arrow lying on the road. Slices stacked along Z give it thickness
+   (preserve-3d: the map tilts the marker, the slices tilt with it) */
+.tour-bus { width: 34px; height: 46px; transform-style: preserve-3d; }
+.tour-bus svg { position: absolute; inset: 0; fill: #8fa3cc; }
+.tour-bus svg:last-child { fill: #fff; }
+/* Fixed width, so the bar holds still from stop to stop: transfers get one row (none at a stop without any), the overflow fades out */
+.tour .main { width: min(340px, calc(100vw - 48px)); display: grid; gap: 4px; }
+#tour-change {
+  display: flex; align-items: center; gap: 8px; height: 20px; overflow: hidden; white-space: nowrap;
+  -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent);
+}
+#tour-change:empty { display: none; }
+#tour-change > *, #tour-change .rail-list > * { flex: none; }
+#tour-change .rail-list { display: flex; gap: 8px; }
+#tour-change .others { margin: 0; flex-wrap: nowrap; }
+.tour .t { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tour .s { color: #8e9bb8; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---------- Mobile: bottom sheet ---------- */
+@media (max-width: 800px) {
+  :root { --panel-w: 0px; --sheet: 46vh; }
+  .panel {
+    top: auto; left: 0; right: 0; bottom: 0; width: auto; height: var(--sheet); border-radius: 18px 18px 0 0;
+    border-bottom: 0; animation-name: sheet-in;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  @keyframes sheet-in { from { transform: translateY(24px); opacity: 0; } }
+  .map-tools { top: max(12px, env(safe-area-inset-top)); }
+  .search input { font-size: 16px; } /* iOS zooms the page on focus below 16px */
+  .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { bottom: calc(var(--sheet) - 8px); }
+  .glass { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(255, 255, 255, 0.97); }
+  /* Flyover bar: a sheet across the bottom edge, the buttons in one full row of thumb-sized keys */
+  .tour {
+    left: 0; right: 0; bottom: 0; translate: none; width: auto; max-width: none; border-radius: 18px 18px 0 0; border-bottom: 0;
+    display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 12px;
+    padding: 14px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+  .tour .main { width: auto; }
+  .tour .t { font-size: 16px; }
+  .tour .keys { grid-column: 1 / -1; gap: 6px; }
+  .tour .keys .chip-btn { flex: 1; height: 42px; padding: 0; border-radius: 12px; font-size: 15px; }
+  /* The map credit would hang mid-screen where the panel was: park it under the sound button for the flight */
+  body.touring .maplibregl-ctrl-bottom-right { bottom: auto; top: calc(max(12px, env(safe-area-inset-top)) + 46px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
