@@ -33,27 +33,44 @@ The build script contains Kangar and Alor Setar. At this time, the feeds for the
 ## How the app works
 
 ```
-data.gov.my GTFS ──► gtfs/build.py ──► data/<city>.json + data/regions.json
+data.gov.my GTFS ──► gtfs/build.py ──► public/data/<city>.json + public/data/regions.json
                         │  merge feeds per city, clean names, keep one pattern per direction,
                         │  snap each shape to roads (Valhalla map matching, cached)
-OSM + rail GTFS  ──► gtfs/transit.py ──► data/transit.json   (rail + ferry layer)
+OSM + rail GTFS  ──► gtfs/transit.py ──► public/data/transit.json   (rail + ferry layer)
 
-index.html  ── MapLibre GL + plain JS, no build step ──► reads data/*.json
+src/  ── React + TypeScript + MapLibre GL, built with Vite ──► reads data/*.json
 ```
 
-The app is one static file, `index.html`. The Python build scripts do all the large tasks one time before you use the app.
+React shows the panel, the buttons, and the flyover bar. The map code in `src/app/` is not React code. It draws the map and keeps the state in a small store. The React components read that store. The Python build scripts do all the large tasks one time before you use the app.
 
 ## Start the app
 
-1. Start a web server in the project folder:
+Make sure that you have Node.js 20.19 or higher.
+
+1. Install the packages:
 
    ```sh
-   python3 -m http.server 8765
+   npm install
    ```
 
-2. Open `http://localhost:8765` in a browser.
+2. Start the development server:
 
-The repository contains the built data. The app operates without a build. Place search uses Nominatim (refer to "Local services"). If Nominatim does not operate, place search shows a message. The other functions operate correctly.
+   ```sh
+   npm run dev
+   ```
+
+3. Open `http://localhost:8765` in a browser.
+
+The repository contains the built data. Place search uses Nominatim (refer to "Local services"). If Nominatim does not operate, place search shows a message. The other functions operate correctly. To use a different Nominatim server, set `VITE_NOMINATIM_URL` to its search address.
+
+## Build the app
+
+```sh
+npm run build     # checks the types, then writes the static site to dist/
+npm run preview   # serves dist/ at http://localhost:8765
+```
+
+`dist/` is a static site. It operates from any folder on any web server. A push to `main` starts `.github/workflows/deploy.yml`, which builds the app and publishes `dist/` to GitHub Pages. For this, the Pages source of the repository must be "GitHub Actions".
 
 ## Build the data again
 
@@ -82,8 +99,8 @@ done
 ### 2. Build
 
 ```sh
-python3 gtfs/build.py     # buses → data/<city>.json, data/regions.json
-python3 gtfs/transit.py   # rail + ferry → data/transit.json (downloads its own GTFS, uses the OSM PBF)
+python3 gtfs/build.py     # buses → public/data/<city>.json, public/data/regions.json
+python3 gtfs/transit.py   # rail + ferry → public/data/transit.json (downloads its own GTFS, uses the OSM PBF)
 ```
 
 Road snapping sends requests to Valhalla at `localhost:8004`. The script keeps the results in `gtfs/snap-cache.json`. With this cache, a build takes approximately 15 seconds and does not use Valhalla.
@@ -112,10 +129,16 @@ docker run -d --name nominatim-my -p 8088:8080 \
 ## Project files
 
 ```
-index.html             the full app (HTML, CSS, JS)
-data/                  built JSON for the app (in the repository)
-gtfs/build.py          bus GTFS → data/<city>.json
-gtfs/transit.py        rail and ferry layer → data/transit.json
+index.html             the page: starts the data requests, then loads src/main.tsx
+src/main.tsx           starts React
+src/App.tsx            the page layout and the keyboard shortcuts
+src/components/        the panel, the city list, the flyover bar, and the map buttons
+src/app/               the map: layers, navigation, live buses, flyover, place search, and the state store
+src/lib/               data loading, geometry, timetable, rail transfers, and sound
+src/styles.css         all the styles
+public/data/           built JSON for the app (in the repository)
+gtfs/build.py          bus GTFS → public/data/<city>.json
+gtfs/transit.py        rail and ferry layer → public/data/transit.json
 gtfs/snap-cache.json   Valhalla results, one entry for each input shape
 gtfs/raw/              downloaded feeds (Git ignores this folder)
 ```
@@ -125,6 +148,7 @@ gtfs/raw/              downloaded feeds (Git ignores this folder)
 - **Bus and rail timetables:** [data.gov.my GTFS Static](https://developer.data.gov.my/realtime-api/gtfs-static) (Prasarana, BAS.MY, KTMB)
 - **Map tiles:** [OpenFreeMap](https://openfreemap.org). Rail lines, ferry lines, and places come from [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL).
 - **Map display:** [MapLibre GL JS](https://maplibre.org)
+- **Interface:** [React](https://react.dev), built with [Vite](https://vite.dev)
 - **Road snapping:** [Valhalla](https://github.com/valhalla/valhalla)
 - **Place search:** [Nominatim](https://nominatim.org)
 

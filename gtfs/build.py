@@ -1,6 +1,6 @@
 """GTFS static (data.gov.my) → compact per-region JSON for the web app.
 
-Run: python3 gtfs/build.py   (reads gtfs/raw/<feed>/, writes data/)
+Run: python3 gtfs/build.py   (reads gtfs/raw/<feed>/, writes public/data/)
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from shapely.affinity import scale
 
 ROOT = Path(__file__).resolve().parent.parent
 RAW = ROOT / "gtfs" / "raw"
-OUT = ROOT / "data"
+OUT = ROOT / "public" / "data"
 
 # feed dir → (operator name, brand colour)
 OPERATORS = {
@@ -516,7 +516,7 @@ def natural(s: str):
 
 
 def main():
-    OUT.mkdir(exist_ok=True)
+    OUT.mkdir(parents=True, exist_ok=True)
     index = []
     for rid, rname, feeds in REGIONS:
         stops = StopIndex()
