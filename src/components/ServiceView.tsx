@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react';
 import { colorOf, type RegionIndex } from '../lib/data';
 import { railNear } from '../lib/rail';
-import { clock, headway, runningNote, viaOf } from '../lib/timetable';
+import { clock, ended, headway, viaOf } from '../lib/timetable';
 import { Badge, tone, Transfers } from './chips';
 import { useApp, useAppState } from './context';
 
@@ -51,7 +51,7 @@ export const ServiceView = memo(function ServiceView({ data, svc: svcIdx, dir }:
           <div className="fact"><b>{clock(p.last)}</b><span>Last bus</span></div>
           <div className="fact"><b>{every ? `~${every} min` : '—'}</b><span>Every</span></div>
         </div>
-        {runningNote(p).startsWith('Ended') && <div className="note"><span className="off ended">Ended for today</span></div>}
+        {ended(p) && <div className="note"><span className="off ended">Ended for today</span></div>}
         <div className="toggle-row">
           <div className="note">{p.stops.length} stops{p.mins ? ` · ~${p.mins[p.mins.length - 1]} min end to end` : ''}</div>
           <button className="chip-btn" onClick={app.startTour}>{'▶︎ Fly along'}</button>

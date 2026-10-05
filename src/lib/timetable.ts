@@ -6,16 +6,13 @@ const toMin = (t: string) => +t.slice(0, 2) * 60 + +t.slice(2);
 /** " via Juaseh" from the route name: tells apart buses with the same ends (N10A/N10B) */
 export const viaOf = (svc: Service) => svc.name.match(/ via .+$/i)?.[0] ?? '';
 
-/** Weekday timetable only: "Starts 06:00" / "Ended for today", or '' while running (and on weekends) */
-export function runningNote(p: Pattern) {
+/** Weekday timetable only: has today's last bus left? (never true on weekends) */
+export function ended(p: Pattern) {
   const d = new Date();
-  if (!p.first || !p.last || d.getDay() === 0 || d.getDay() === 6) return '';
-  const now = d.getHours() * 60 + d.getMinutes(), first = toMin(p.first);
+  if (!p.first || !p.last || d.getDay() === 0 || d.getDay() === 6) return false;
   let last = toMin(p.last);
-  if (last < first) last += 1440; // runs past midnight
-  if (now < first && now + 1440 > last) return `Starts ${clock(p.first)}`;
-  if (now > last) return 'Ended for today';
-  return '';
+  if (last < toMin(p.first)) last += 1440; // runs past midnight
+  return d.getHours() * 60 + d.getMinutes() > last;
 }
 
 /** Average gap between departures, in minutes */

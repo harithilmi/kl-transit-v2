@@ -19,7 +19,7 @@ export function readable(hex: string) {
   return `rgb(${c.map((v) => Math.round(v * k)).join(',')})`;
 }
 
-export const KTM = '#1c4c9c';
+const KTM = '#1c4c9c';
 /** Komuter lines share one chip, so it gets KTM's brand blue rather than one line's colour */
 export const chipColor = (l: TransitLine) => (l.mode === 'komuter' ? KTM : l.color);
 

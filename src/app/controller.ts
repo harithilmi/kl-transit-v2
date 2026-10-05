@@ -55,7 +55,7 @@ export function createController(container: HTMLElement, regions: RegionMeta[]) 
     source('transit').setData(fc(transit.lines.flatMap((l) => l.pieces.map((p): GeoJSON.Feature => ({ type: 'Feature',
       properties: { mode: l.mode, color: l.color, name: l.name, ink: readable(l.color), s: p.s, n: p.n },
       geometry: { type: 'LineString', coordinates: p.c } })))));
-    source('stations').setData(fc(transit.stations.map((st) => ({ type: 'Feature', properties: { name: st.name, lines: st.lines, mode: st.mode },
+    source('stations').setData(fc(transit.stations.map((st) => ({ type: 'Feature', properties: { name: st.name, lines: st.lines },
       geometry: { type: 'Point', coordinates: [st.lng, st.lat] } }))));
   });
 
@@ -509,7 +509,7 @@ export function createController(container: HTMLElement, regions: RegionMeta[]) 
       if (!navigator.geolocation) return fail();
       navigator.geolocation.getCurrentPosition(async ({ coords }) => {
         const here: LngLat = [coords.longitude, coords.latitude];
-        const inside = regions.find(({ bounds: [w, s, e, n] }) => here[0] >= w && here[0] <= e && here[1] >= s && here[1] <= n);
+        const inside = regionAt(regions, store.get().regionId, { lng: here[0], lat: here[1] });
         if (inside && inside.id !== store.get().regionId) await setRegion(inside.id, { kind: 'home' }, false);
         if (!dead) map.flyTo({ center: here, zoom: 16, padding: pad(), duration: 900 });
       }, fail);
