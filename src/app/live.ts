@@ -44,12 +44,13 @@ export function createLive(map: MapLibre) {
     source.setData(fc(features));
   }
 
-  // ~12 redraws a second while buses glide: smooth enough, and easy on phones
+  // ~12 redraws a second while buses glide: smooth enough, and easy on phones.
+  // One a second during a flyover: every redraw sends the buses through the map's workers, which the flight needs for itself
   function animate() {
     cancelAnimationFrame(frame);
     let last = 0;
     const step = (now: number) => {
-      if (now - last > 80) { last = now; draw(); }
+      if (now - last > (store.get().tour ? 1000 : 80)) { last = now; draw(); }
       if (now - movedAt < LIVE.every && buses.size) frame = requestAnimationFrame(step);
     };
     frame = requestAnimationFrame(step);
