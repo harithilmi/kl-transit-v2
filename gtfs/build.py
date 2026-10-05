@@ -300,14 +300,14 @@ def build_feed(feed: str, op_idx: int, stops: StopIndex):
         if stray:
             pts = []
         if len(pts) < 2 * len(seq):  # too coarse to follow roads
-            pts = road_path([(stops.stops[s][0], stops.stops[s][1]) for s in seq]) or pts
+            pts = road_path(stop_pts) or pts
         else:  # dense but often GPS-noisy: snap the feed's own path onto the roads
             matched = match_shape(pts, stop_pts)
             if matched is None and os.environ.get("DEBUG"):
                 print(f"  kept feed shape: {feed} {r.get('route_short_name') or r['route_id']}", file=sys.stderr)
             pts = matched or pts
         if len(pts) < 2:
-            pts = [(stops.stops[s][0], stops.stops[s][1]) for s in seq]
+            pts = stop_pts
 
         # "Towards" = last stop; loops name their turnaround
         loop = seq[0] == seq[-1] or dist_m(stops.stops[seq[0]], stops.stops[seq[-1]]) < 300
@@ -527,7 +527,7 @@ def main():
             name, color = OPERATORS[feed]
             svcs = build_feed(feed, len(operators), stops)
             if svcs:
-                operators.append({"id": feed, "name": name, "color": color})
+                operators.append({"name": name, "color": color})
                 services += svcs
         if not services or len(stops.stops) < 5:
             print(f"skip {rid}: no usable data", file=sys.stderr)
@@ -544,11 +544,11 @@ def main():
 
         lngs, lats = [s[0] for s in stop_list], [s[1] for s in stop_list]
         bounds = [min(lngs), min(lats), max(lngs), max(lats)]
-        region = {"id": rid, "name": rname, "bounds": bounds, "operators": operators, "stops": stop_list, "services": services}
+        region = {"id": rid, "bounds": bounds, "operators": operators, "stops": stop_list, "services": services}
         path = OUT / f"{rid}.json"
         path.write_text(json.dumps(region, separators=(",", ":"), ensure_ascii=False))
         index.append({"id": rid, "name": rname, "bounds": bounds, "operators": list(dict.fromkeys(o["name"] for o in operators)),
-                      "services": len(services), "stops": len(stop_list), "area": service_area([(s[0], s[1]) for s in stop_list])})
+                      "services": len(services), "area": service_area([(s[0], s[1]) for s in stop_list])})
         print(f"{rid:14} {len(services):4} services {len(stop_list):5} stops {path.stat().st_size / 1024:7.0f} KB")
 
     SNAP_CACHE.write_text(json.dumps(snap_cache, separators=(",", ":")))

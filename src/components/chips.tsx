@@ -29,7 +29,7 @@ export function Transfers({ data, rail, svcs }: { data: RegionIndex; rail: RailN
   if (!rail.length) return <Badges data={data} svcs={svcs} />;
   return (
     <div className="others">
-      {rail.map(({ line, station, d }) => <RailChip key={railCode(line)} line={line} title={`${line.name} · ${station} · ${Math.round(d / 10) * 10} m`} />)}
+      {rail.map(({ line, station, d }) => <RailChip key={railCode(line)} line={line} title={`${line.name} · ${station} · ${distance(d)}`} />)}
       {svcs.map((s) => <Badge key={s} region={data.region} svc={data.region.services[s]} size="sm" />)}
     </div>
   );

@@ -2,7 +2,7 @@ import maplibregl, { type FitBoundsOptions, type GeoJSONSource, type Map as MapL
 import { flushSync } from 'react-dom';
 import { colorOf } from '../lib/data';
 import { isMobile } from '../lib/geo';
-import { inkOn, KTM, railCode, railNear } from '../lib/rail';
+import { chipColor, inkOn, railCode, railNear } from '../lib/rail';
 import { sound } from '../lib/sound';
 import type { LngLat } from '../types';
 import { fc, railOpacity } from './layers';
@@ -154,7 +154,7 @@ export function createTour({ map, point, drawSelection, fitCoords, writeHash, hu
     const dots = stops.map((s, k) => {
       const rail = railNear(transit, region, s);
       if (!rail.length) return point(s, { color, ring: '#ffffff', end: k === 0 || k === stops.length - 1 });
-      const railColor = rail[0].line.mode === 'komuter' ? KTM : rail[0].line.color;
+      const railColor = chipColor(rail[0].line);
       return point(s, { color, ring: railColor, end: true, rail: rail.map((r) => railCode(r.line)).join(' · '), railColor, railInk: inkOn(railColor) });
     });
     /** Like a real bus: brakes into each stop, almost halts, pulls away, and opens up on a long stretch with no stops. 1 = normal speed */

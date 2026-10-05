@@ -40,7 +40,6 @@ Coords = list[list[list[float]]]
 class Line(NamedTuple):
     id: str
     name: str
-    short: str
     mode: str
     color: str
     geom: MultiLineString
@@ -225,7 +224,7 @@ def rapid(feats: dict[str, dict], rels: list[str]) -> tuple[list[Line], list[dic
         else:  # GTFS shape is coarse (≤1.4 km segments): round off the corners
             cs = chaikin([(x, y) for _, x, y in sorted(pts[shape_of[rid]])])
             geom, source[rid] = MultiLineString([cs]), "gtfs"
-        lines.append(Line(rid, r["route_long_name"], r["route_short_name"], RAPID_MODE[rid],
+        lines.append(Line(rid, r["route_long_name"], RAPID_MODE[rid],
                           "#" + r["route_color"].upper(), geom))
     members, _, _ = stop_lines(RAIL, set(RAPID_MODE))
     stations = [{"name": nice(s["stop_name"]), "lng": float(s["stop_lon"]), "lat": float(s["stop_lat"]),
@@ -235,13 +234,13 @@ def rapid(feats: dict[str, dict], rels: list[str]) -> tuple[list[Line], list[dic
 
 # ---------- KTM (GTFS stops, routed along OSM metre-gauge track) ----------
 
-KTM_LINES = {  # route_id → (name, short, mode)
-    "KC05_KB18": ("KTM Komuter Seremban Line", "SRL", "komuter"),
-    "KA15_KD19": ("KTM Komuter Port Klang Line", "PKL", "komuter"),
-    "100_47300": ("KTM Komuter Utara (Butterworth–Padang Besar)", "PBL", "komuter"),
-    "100_9000": ("KTM Komuter Utara (Butterworth–Ipoh)", "IPL", "komuter"),
-    "SS": ("KTM Komuter Shuttle Selatan", "SS", "komuter"),
-    "ETS": ("KTM ETS", "ETS", "ets"),
+KTM_LINES = {  # route_id → (name, mode)
+    "KC05_KB18": ("KTM Komuter Seremban Line", "komuter"),
+    "KA15_KD19": ("KTM Komuter Port Klang Line", "komuter"),
+    "100_47300": ("KTM Komuter Utara (Butterworth–Padang Besar)", "komuter"),
+    "100_9000": ("KTM Komuter Utara (Butterworth–Ipoh)", "komuter"),
+    "SS": ("KTM Komuter Shuttle Selatan", "komuter"),
+    "ETS": ("KTM ETS", "ets"),
 }
 SERVICE_COST = {"yard": 5.0, "siding": 5.0, "spur": 5.0, "crossover": 1.5}
 
@@ -331,8 +330,8 @@ def ktm(feats: dict[str, dict]) -> tuple[list[Line], list[dict], list[str]]:
             elif na != nb:  # no track found: fall back to a straight hop, and flag it
                 segs[rid].append(LineString([(float(stops[x]["stop_lon"]), float(stops[x]["stop_lat"])) for x in (a, b)]))
                 gaps.append(f"{rid}: {stops[a]['stop_name']} → {stops[b]['stop_name']}")
-    lines = [Line(rid, name, short, mode, "#" + routes[rid]["route_color"].upper(), dedupe(segs[rid]))
-             for rid, (name, short, mode) in KTM_LINES.items() if segs[rid]]
+    lines = [Line(rid, name, mode, "#" + routes[rid]["route_color"].upper(), dedupe(segs[rid]))
+             for rid, (name, mode) in KTM_LINES.items() if segs[rid]]
     stations = [{"name": nice(stops[sid]["stop_name"]), "lng": float(stops[sid]["stop_lon"]),
                  "lat": float(stops[sid]["stop_lat"]), "lines": sorted(r)} for sid, r in members.items()]
     return lines, stations, sorted(set(gaps))
@@ -341,8 +340,8 @@ def ktm(feats: dict[str, dict]) -> tuple[list[Line], list[dict], list[str]]:
 # ---------- KLIA Ekspres / Transit (OSM relations) ----------
 
 AIRPORT = {  # relation id → line
-    "r8119878": ("KE", "KLIA Ekspres", "KLIA-E", "#800080"),
-    "r8119876": ("KT", "KLIA Transit", "KLIA-T", "#139593"),
+    "r8119878": ("KE", "KLIA Ekspres", "#800080"),
+    "r8119876": ("KT", "KLIA Transit", "#139593"),
 }
 
 ERL_NAMES = {"KL Sentral Departure": "KL Sentral", "ERL Putrajaya/Cyberjaya": "Putrajaya Sentral"}
@@ -354,9 +353,9 @@ def airport(feats: dict[str, dict], rels: list[str]) -> tuple[list[Line], list[d
         rid = rel.split(" ", 1)[0]
         if rid not in AIRPORT:
             continue
-        lid, name, short, color = AIRPORT[rid]
+        lid, name, color = AIRPORT[rid]
         mem = opl_members(rel)
-        lines.append(Line(lid, name, short, "airport", color, dedupe(relation_ways(feats, rel))))
+        lines.append(Line(lid, name, "airport", color, dedupe(relation_ways(feats, rel))))
         for r, role in mem:
             f = feats.get(r)
             if r[0] == "n" and role.startswith("stop") and f and f["properties"].get("name"):
@@ -394,7 +393,7 @@ def ferries(feats: dict[str, dict]) -> tuple[list[Line], list[dict]]:
         if not hits:
             continue
         g = max((LineString(f["geometry"]["coordinates"]) for f in hits), key=lambda l: l.length)  # one direction only
-        lines.append(Line(fid, name, fid, "ferry", FERRY_COLOR, MultiLineString([g])))
+        lines.append(Line(fid, name, "ferry", FERRY_COLOR, MultiLineString([g])))
         for t, tx, ty in terms:
             x, y = min((g.coords[0], g.coords[-1]), key=lambda c: metres(c, (tx, ty)))
             stations.append({"name": t, "lng": x, "lat": y, "lines": [fid]})
@@ -420,7 +419,7 @@ def penambang(feats: dict[str, dict]) -> tuple[list[Line], list[dict]]:
                 for f in feats.values() if f["properties"].get("amenity") == "ferry_terminal" and f["properties"].get("name")
                 and f["geometry"]["type"] == "Point" and inside(c := f["geometry"]["coordinates"])
                 and geom.distance(Point(c)) < 0.0011 for x, y in [c]]
-    return [Line("PNB", "Penambang (Sarawak River)", "PNB", "ferry", FERRY_COLOR, geom)], stations
+    return [Line("PNB", "Penambang (Sarawak River)", "ferry", FERRY_COLOR, geom)], stations
 
 
 # ---------- stations: merge interchanges ----------
@@ -456,7 +455,7 @@ def merge_stations(raw: list[dict], mode_of: dict[str, str]) -> list[dict]:
         out.append({"name": best["name"],
                     "lng": round(sum(s["lng"] for s in g) / len(g), 5),
                     "lat": round(sum(s["lat"] for s in g) / len(g), 5),
-                    "lines": lines, "mode": mode_of[lines[0]]})
+                    "lines": lines})
     return sorted(out, key=lambda s: s["name"])
 
 
@@ -526,7 +525,7 @@ def main() -> None:
     mode_of = {l.id: l.mode for l in lines}
     stations = merge_stations(r_st + k_st + a_st + f_st, mode_of)
     data = {
-        "lines": [{"id": l.id, "name": l.name, "short": l.short, "mode": l.mode, "color": l.color, "pieces": p}
+        "lines": [{"id": l.id, "name": l.name, "mode": l.mode, "color": l.color, "pieces": p}
                   for l, p in zip(lines, lanes(lines))],
         "stations": stations,
     }
